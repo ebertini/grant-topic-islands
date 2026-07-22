@@ -1,0 +1,11 @@
+data/raw/
+data/processed/
+*.pyc
+__pycache__/
+.venv/
+.env
+.env.*
+*.key
+
+# macOS
+.DS_Store

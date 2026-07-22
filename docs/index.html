@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grant Topic Islands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root { --ink:#0b0b0b; --muted:#6b6a64; --hair:#e3e2dd; --blue:#5079a8; }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; font-family:"Fira Sans",-apple-system,BlinkMacSystemFont,sans-serif;
+    color:var(--ink); background:radial-gradient(125% 105% at 50% 32%,#ffffff 0%,#f1f0ec 100%); }
+  main { max-width:760px; margin:0 auto; padding:72px 24px; }
+  h1 { font-size:30px; font-weight:700; margin:0 0 6px; }
+  p.lede { color:var(--muted); font-size:16px; line-height:1.55; margin:0 0 36px; }
+  .cards { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  a.card { display:block; text-decoration:none; color:inherit; border:1px solid var(--hair);
+    border-radius:12px; padding:22px 22px 24px; background:#fff;
+    box-shadow:0 1px 3px rgba(0,0,0,.05); transition:box-shadow .15s,border-color .15s; }
+  a.card:hover { box-shadow:0 4px 14px rgba(0,0,0,.09); border-color:var(--blue); }
+  a.card h2 { font-size:18px; margin:0 0 6px; color:var(--blue); }
+  a.card p { margin:0; font-size:13.5px; color:var(--muted); line-height:1.5; }
+  footer { margin-top:44px; font-size:12.5px; color:var(--muted); line-height:1.6; }
+  @media (max-width:560px){ .cards{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<main>
+  <h1>Grant Topic Islands</h1>
+  <p class="lede">A visual analysis of a collection of research-grant abstracts. Keyphrases were
+  extracted per grant, organized into a three-level topic hierarchy, and mapped to the documents
+  they cover. Two views of the same structure:</p>
+  <div class="cards">
+    <a class="card" href="islands.html">
+      <h2>Topic Islands →</h2>
+      <p>A semantic map of topics as labeled keyphrase clusters. Click a topic to drill into its
+      subtopics; click a keyphrase to read the grants that mention it, with the term highlighted in
+      each abstract.</p>
+    </a>
+    <a class="card" href="cards.html">
+      <h2>Topic Cards →</h2>
+      <p>Every top-level topic as a card, with its subtopics, document-coverage bars, and expandable
+      keyphrases. Sortable, filterable by funder.</p>
+    </a>
+  </div>
+  <footer>Built from an offline Python pipeline (research-grant filtering, keyphrase extraction,
+  hierarchical clustering, and topic labeling). Static site — no server required.</footer>
+</main>
+</body>
+</html>

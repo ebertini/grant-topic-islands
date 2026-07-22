@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grant Topic Islands</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<style>
+  :root {
+    --surface-1:#fcfcfb; --surface-2:#f0efec; --text-primary:#0b0b0b;
+    --text-secondary:#52514e; --text-muted:#8a8a83; --hairline:#e3e2dd;
+    --nsf:#2a78d6; --nih:#008300; --other:#eda100; --accent:#2a78d6; --hull:#e6ebf2;
+    --kw-blue:#5079a8; --kw-gray:#93938c;
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; height:100%; background:var(--surface-1); overflow:hidden;
+    font-family:"Fira Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text-primary); }
+  #app { display:grid; grid-template-columns:1fr 320px; grid-template-rows:48px 1fr; height:100%; }
+  header { grid-column:1/3; display:flex; align-items:center; gap:14px; padding:0 16px;
+    border-bottom:1px solid var(--hairline); }
+  header h1 { font-size:15px; font-weight:600; margin:0; white-space:nowrap; }
+  #crumbs { font-size:13px; color:var(--text-secondary); display:flex; align-items:center; gap:6px; }
+  #crumbs .c { cursor:pointer; color:var(--accent); }
+  #crumbs .c.here { color:var(--text-primary); cursor:default; font-weight:600; }
+  #crumbs .sep { color:var(--text-muted); }
+  .controls { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .btn { font:inherit; font-size:12px; padding:4px 10px; border:1px solid var(--hairline);
+    background:var(--surface-1); border-radius:6px; cursor:pointer; color:var(--text-secondary); }
+  .btn:hover { border-color:var(--text-muted); }
+  .btn.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #stage { grid-column:1; grid-row:2; position:relative; overflow:hidden;
+    background:radial-gradient(125% 105% at 50% 38%, #ffffff 0%, #f1f0ec 100%); }
+  svg { width:100%; height:100%; display:block; cursor:grab; }
+  svg:active { cursor:grabbing; }
+  .hull { fill:var(--hull); fill-opacity:.6; stroke:var(--hairline); stroke-width:1; }
+  .hull.drill { cursor:pointer; }
+  .hull.drill:hover { fill-opacity:.85; }
+  .group-title { text-anchor:middle; font-weight:700; fill:var(--text-primary);
+    paint-order:stroke; stroke:var(--surface-1); stroke-width:3.5px; }
+  .group-title.drill { cursor:pointer; }
+  .group-title.drill:hover { fill:var(--accent); }
+  .kw-g { cursor:pointer; }
+  .kw-card { fill:#fff; stroke:transparent; stroke-width:1.3px; }
+  .kw-g:hover .kw-card { stroke:var(--accent); }
+  .kw-g:hover .kw-text { fill:var(--accent); }
+  .kw-g.sel .kw-card { stroke:var(--accent); }
+  .kw-g.sel .kw-text { fill:var(--accent); font-weight:700; }
+  .kw-text { text-anchor:middle; dominant-baseline:central; }
+  #panel { grid-column:2; grid-row:2; border-left:1px solid var(--hairline); background:var(--surface-1);
+    padding:14px 16px; overflow-y:auto; font-size:13px; }
+  #panel h2 { font-size:14px; margin:0 0 2px; }
+  #panel .psub { color:var(--text-muted); font-size:12px; margin-bottom:12px; }
+  #panel .grant { padding:8px 0; border-top:1px solid var(--hairline); }
+  #panel .grant .hd { cursor:pointer; display:flex; align-items:baseline; }
+  #panel .grant .cav { color:var(--text-muted); margin-right:5px; font-size:10px; }
+  #panel .grant .t { font-weight:500; }
+  #panel .grant .m { color:var(--text-muted); font-size:11px; margin-top:2px; }
+  #panel .abs { margin-top:6px; font-size:12.5px; line-height:1.55; color:var(--text-secondary); }
+  #panel .legend { display:flex; gap:14px; align-items:center; font-size:11px; color:var(--text-muted); margin:2px 0 12px; }
+  #panel .kw-hit { background:#e7edf5; color:#3a5a82; border-radius:2px; padding:0 2px; }
+  #panel .kw-sel { background:#5079a8; color:#fff; border-radius:2px; padding:0 2px; font-weight:600; }
+  #panel .empty { color:var(--text-muted); }
+  #tooltip { position:absolute; pointer-events:none; background:#111; color:#fff; font-size:12px;
+    padding:6px 8px; border-radius:5px; opacity:0; transform:translate(-50%,-130%); white-space:nowrap; z-index:10; }
+  #hint { position:absolute; left:12px; bottom:10px; font-size:11px; color:var(--text-muted);
+    background:var(--surface-1); padding:4px 8px; border:1px solid var(--hairline); border-radius:6px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Grant Topic Islands</h1>
+    <nav id="crumbs"></nav>
+  </header>
+  <div id="stage">
+    <svg id="svg"></svg>
+    <div id="tooltip"></div>
+    <div id="hint">click a topic to open its subtopics · click empty space to go back · scroll to zoom</div>
+  </div>
+  <aside id="panel"><div class="empty">Click a keyphrase to see the grants it appears in.</div></aside>
+</div>
+
+<script type="module">
+const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+
+const data=await fetch("topics.json").then(r=>r.json());
+const docs=data.docs||{};
+const topicById=new Map(data.topics.map(t=>[t.id,t]));
+
+// every keyphrase used in the visualization -> regex, for highlighting inside abstracts
+const allKw=new Set();
+data.topics.forEach(t=>t.subtopics.forEach(s=>s.keywords.forEach(k=>allKw.add(k.text))));
+const escapeRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+const KW_RE=new RegExp("\\b(?:"+[...allKw].sort((a,b)=>b.length-a.length).map(escapeRe).join("|")+")\\b","gi");
+const highlightAbstract=(text,sel)=>esc(text).replace(KW_RE,
+  m=>`<mark class="${m.toLowerCase()===sel?"kw-sel":"kw-hit"}">${m}</mark>`);
+
+const W=1600,H=1000,MARGIN=180;
+const sx=d3.scaleLinear([0,1],[MARGIN,W-MARGIN]);
+const sy=d3.scaleLinear([0,1],[MARGIN,H-MARGIN]);
+const KW_FS=18;         // uniform keyphrase size (coverage is too flat across terms to scale by)
+const OVERVIEW_KW=5;    // top keyphrases (by coverage) shown per group
+const SUB_KW=5;
+
+const measure=document.createElement("canvas").getContext("2d");
+const PADX=10, PADY=5.5, RX=4;
+const cardBox=(t,fs)=>{measure.font=`600 ${fs}px "Fira Sans",sans-serif`;
+  return {w:measure.measureText(t).width+2*PADX, h:fs+2*PADY};};
+
+const svg=d3.select("#svg").attr("viewBox",[0,0,W,H]);
+const vp=svg.append("g");
+const gTitle=vp.append("g"), gNode=vp.append("g");
+const defs=svg.append("defs");
+defs.append("filter").attr("id","cardShadow").attr("x","-40%").attr("y","-40%").attr("width","180%").attr("height","180%")
+  .append("feDropShadow").attr("dx",0).attr("dy",1.2).attr("stdDeviation",2.4).attr("flood-color","#2a2a28").attr("flood-opacity",0.16);
+defs.append("filter").attr("id","cardShadowHi").attr("x","-60%").attr("y","-60%").attr("width","220%").attr("height","220%")
+  .append("feDropShadow").attr("dx",0).attr("dy",3).attr("stdDeviation",5).attr("flood-color","#2a2a28").attr("flood-opacity",0.2);
+const zoom=d3.zoom().scaleExtent([0.3,8]).on("zoom",e=>vp.attr("transform",e.transform));
+svg.call(zoom);
+svg.on("click",()=>goUp());
+
+let path=[];              // [] overview (topics) | [topicId] (subtopics of a topic)
+let selectedEl=null, selKwText=null;
+
+/* ---------- keyphrase selection per group ---------- */
+const topTopicKws=t=>{
+  const m=new Map();
+  t.subtopics.forEach(s=>s.keywords.forEach(k=>{ if(!m.has(k.text)||k.doc_freq>m.get(k.text).doc_freq) m.set(k.text,k); }));
+  return [...m.values()].sort((a,b)=>b.doc_freq-a.doc_freq).slice(0,OVERVIEW_KW);
+};
+const subKws=s=>[...s.keywords].sort((a,b)=>b.doc_freq-a.doc_freq).slice(0,SUB_KW);
+
+/* ---------- local layout of one keyphrase cloud around (0,0) ---------- */
+// vertical centered stack: cards ordered by coverage (biggest on top), stacked without overlap
+function layoutStack(kws){
+  const nodes=[...kws].sort((a,b)=>b.doc_freq-a.doc_freq)
+    .map(k=>({k,label:k.text,fs:KW_FS,funder:k.funder}));
+  nodes.forEach(n=>n.box=cardBox(n.label,n.fs));
+  const GAP=4; let y=0, maxW=0;
+  nodes.forEach(n=>{ n.x=0; n.y=y+n.box.h/2; y+=n.box.h+GAP; maxW=Math.max(maxW,n.box.w); });
+  const height=Math.max(0,y-GAP);
+  nodes.forEach(n=>n.y-=height/2);   // center the stack on the group point
+  return {nodes,width:maxW,height};
+}
+
+/* ---------- build groups for the current level ---------- */
+function buildGroups(){
+  if(path.length===0)
+    return data.topics.map(t=>({id:t.id,title:t.llm_label,funder:Object.keys(t.funder_mix)[0],
+      seed:t.seed,cloud:layoutStack(topTopicKws(t)),drill:true}));
+  const t=topicById.get(path[0]);
+  return t.subtopics.map(s=>({id:s.id,title:s.llm_label,funder:Object.keys(s.funder_mix)[0],
+    cloud:layoutStack(subKws(s)),drill:false}));
+}
+
+/* ---------- position the groups, then place keyphrases absolutely ---------- */
+function positionGroups(groups){
+  groups.forEach(g=>g.r=0.5*Math.hypot(g.cloud.width,g.cloud.height)+22);   // +space for the title
+  if(path.length===0){
+    groups.forEach(g=>{g.x=sx(g.seed[0]);g.y=sy(g.seed[1]);});
+    const sim=d3.forceSimulation(groups)
+      .force("x",d3.forceX(g=>sx(g.seed[0])).strength(.12))
+      .force("y",d3.forceY(g=>sy(g.seed[1])).strength(.12))
+      .force("collide",d3.forceCollide(g=>g.r+16).strength(.95)).stop();
+    for(let i=0;i<300;i++)sim.tick();
+  } else {
+    groups.forEach((g,i)=>{const a=i*2.39996,rr=30+16*Math.sqrt(i);g.x=W/2+rr*Math.cos(a);g.y=H/2+rr*Math.sin(a);});
+    const sim=d3.forceSimulation(groups)
+      .force("center",d3.forceCenter(W/2,H/2)).force("charge",d3.forceManyBody().strength(-60))
+      .force("collide",d3.forceCollide(g=>g.r+18).strength(.95)).stop();
+    for(let i=0;i<300;i++)sim.tick();
+  }
+  groups.forEach(g=>g.cloud.nodes.forEach(n=>{n.ax=g.x+n.x;n.ay=g.y+n.y;}));
+}
+
+/* ---------- render ---------- */
+function render(){
+  const groups=buildGroups();
+  positionGroups(groups);
+  drawTitles(groups); drawKeyphrases(groups); drawCrumbs();
+  gTitle.style("opacity",0).transition().duration(300).style("opacity",1);
+  gNode.style("opacity",0).transition().duration(300).style("opacity",1);
+  fit(groups);
+}
+
+function drawTitles(groups){
+  gTitle.selectAll("*").remove();
+  groups.forEach(g=>{
+    const t=gTitle.append("text").attr("class","group-title"+(g.drill?" drill":""))
+      .attr("x",g.x).attr("y",g.y-g.cloud.height/2-14).attr("font-size",path.length===0?24:22)
+      .text(g.title);
+    if(g.drill) t.on("click",e=>{e.stopPropagation();path=[g.id];selectedEl=null;render();});
+  });
+}
+
+function drawKeyphrases(groups){
+  const nodes=groups.flatMap(g=>g.cloud.nodes);
+  gNode.selectAll("g.kw-g").remove();
+  const g=gNode.selectAll("g.kw-g").data(nodes).join("g").attr("class","kw-g")
+    .attr("transform",n=>`translate(${n.ax},${n.ay})`)
+    .on("mouseover",(e,n)=>tip(e,`${n.label} · ${n.k.doc_freq} grants · ${n.funder}`))
+    .on("mousemove",(e,n)=>tip(e,`${n.label} · ${n.k.doc_freq} grants · ${n.funder}`))
+    .on("mouseout",hideTip)
+    .on("click",(e,n)=>{e.stopPropagation();selectKw(n.k,e.currentTarget);});
+  g.append("rect").attr("class","kw-card")
+    .attr("x",n=>-n.box.w/2).attr("y",n=>-n.box.h/2)
+    .attr("width",n=>n.box.w).attr("height",n=>n.box.h).attr("rx",RX).attr("ry",RX)
+    .attr("filter","url(#cardShadow)");
+  g.append("text").attr("class","kw-text").attr("font-size",n=>n.fs)
+    .attr("font-weight",600).style("fill","var(--kw-blue)")
+    .text(n=>n.label);
+}
+
+function fit(groups){
+  const x0=d3.min(groups,g=>g.x-g.r), x1=d3.max(groups,g=>g.x+g.r);
+  const y0=d3.min(groups,g=>g.y-g.r), y1=d3.max(groups,g=>g.y+g.r);
+  const k=Math.min(W/(x1-x0),H/(y1-y0))*0.9;
+  svg.transition().duration(450).call(zoom.transform,
+    d3.zoomIdentity.translate(W/2-k*(x0+x1)/2,H/2-k*(y0+y1)/2).scale(k));
+}
+
+function goUp(){ if(path.length){path=path.slice(0,-1);selectedEl=null;render();} }
+
+function drawCrumbs(){
+  const parts=[{label:"All Topics",path:[]}];
+  if(path.length>=1) parts.push({label:topicById.get(path[0]).llm_label,path:[path[0]]});
+  const nav=d3.select("#crumbs"); nav.selectAll("*").remove();
+  parts.forEach((p,i)=>{
+    if(i) nav.append("span").attr("class","sep").text("▸");
+    nav.append("span").attr("class","c"+(i===parts.length-1?" here":""))
+      .text(p.label).on("click",()=>{ if(i<parts.length-1){path=p.path;selectedEl=null;render();} });
+  });
+}
+
+/* ---------- keyphrase drill-down ---------- */
+const panel=document.getElementById("panel");
+function selectKw(k,el){
+  if(selectedEl) selectedEl.classList.remove("sel");
+  selectedEl=el; el.classList.add("sel"); selKwText=k.text.toLowerCase();
+  const grants=(k.docs||[]).map(id=>docs[id]).filter(Boolean).sort((a,b)=>(b.year||0)-(a.year||0)).slice(0,60);
+  const legend=`<div class="legend">`+
+    `<span><mark class="kw-sel">selected</mark> this term</span>`+
+    `<span><mark class="kw-hit">other</mark> other keyphrases</span></div>`;
+  panel.innerHTML=`<h2>${esc(k.text)}</h2>`+
+    `<div class="psub">${k.doc_freq} grants${k.doc_freq>grants.length?` · showing ${grants.length}`:""}</div>`+
+    (grants.length?legend+grants.map((g,i)=>
+      `<div class="grant"><div class="hd" data-i="${i}"><span class="cav">▸</span>`+
+      `<span class="t">${esc(g.title||"(untitled)")}</span></div>`+
+      `<div class="m">${g.funder_code||"?"}${g.year?" · "+g.year:""}</div>`+
+      `<div class="abs" hidden></div></div>`).join("")
+     :`<div class="empty">No indexed grants.</div>`);
+  panel.querySelectorAll(".grant .hd").forEach(hd=>{
+    hd.onclick=()=>{
+      const g=grants[+hd.dataset.i], row=hd.parentElement;
+      const abs=row.querySelector(".abs"), cav=hd.querySelector(".cav");
+      if(abs.hidden){
+        if(!abs.dataset.done){ abs.innerHTML=highlightAbstract(g.abstract||"(no abstract available)",selKwText); abs.dataset.done="1"; }
+        abs.hidden=false; cav.textContent="▾";
+      } else { abs.hidden=true; cav.textContent="▸"; }
+    };
+  });
+}
+
+/* ---------- tooltip + controls ---------- */
+const tt=document.getElementById("tooltip"), stage=document.getElementById("stage");
+const tip=(e,text)=>{const r=stage.getBoundingClientRect();tt.style.left=(e.clientX-r.left)+"px";
+  tt.style.top=(e.clientY-r.top)+"px";tt.textContent=text;tt.style.opacity=1;};
+const hideTip=()=>tt.style.opacity=0;
+
+try{ await document.fonts.load('600 24px "Fira Sans"'); await document.fonts.load('500 18px "Fira Sans"'); }catch(e){}
+render();
+</script>
+</body>
+</html>
