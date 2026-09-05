@@ -1,0 +1,35 @@
+[
+  {
+    "id": "grants",
+    "label": "General Research Awards",
+    "file": "datasets/grants.json",
+    "n_docs": 1537,
+    "n_topics": 18,
+    "funders": [
+      "DOE",
+      "NASA",
+      "NEH",
+      "NIH",
+      "NSF",
+      "USDA"
+    ],
+    "excluded_years": []
+  },
+  {
+    "id": "nsf-cise-21-25",
+    "label": "NSF CISE 2021–2025",
+    "file": "datasets/nsf-cise-21-25.json",
+    "n_docs": 3851,
+    "n_topics": 18,
+    "funders": [
+      "CCF",
+      "CNS",
+      "IIS",
+      "OAC"
+    ],
+    "excluded_years": [
+      2020,
+      2026
+    ]
+  }
+]

@@ -11,19 +11,24 @@ Auth: uses the standard Anthropic credential chain (ANTHROPIC_API_KEY, or an
 `ant auth login` profile). If none is configured, this stage cannot run — set a
 key or run `ant auth login` first.
 
-Input/Output: data/processed/topics.json (updated in place, adds `llm_label`)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input/Output: data/processed/<DATASET>/topics.json (updated in place, adds `llm_label`)
 """
 
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import anthropic
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parent.parent
-TOPICS = ROOT / "data" / "processed" / "topics.json"
+DATASET = os.environ.get("DATASET", "grants")
+TOPICS = ROOT / "data" / "processed" / DATASET / "topics.json"
 
 MODEL = "claude-opus-4-8"
 TOP_KEYWORDS = 10   # member keywords shown to Claude per cluster

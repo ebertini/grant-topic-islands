@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grant Topic Islands — Pipeline &amp; Decision Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&family=Fira+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --surface-1:#fcfcfb; --surface-2:#f0efec; --surface-3:#e9e8e3;
+    --text-primary:#0b0b0b; --text-secondary:#52514e; --text-muted:#8a8a83;
+    --hairline:#e3e2dd;
+    --accent:#2a78d6;      /* deterministic code */
+    --llm:#b3541e;         /* LLM judgment call */
+    --param:#7a5cb8;       /* tunable parameter */
+    --drop:#c23b3b;        /* data dropped */
+    --keep:#2f8f5b;        /* data kept */
+  }
+  * { box-sizing:border-box; }
+  html,body { margin:0; background:var(--surface-1); color:var(--text-primary);
+    font-family:"Fira Sans",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+  code, .mono { font-family:"Fira Mono",monospace; }
+  .wrap { max-width:920px; margin:0 auto; padding:40px 24px 120px; }
+  h1 { font-size:26px; font-weight:700; margin:0 0 6px; }
+  .sub { color:var(--text-secondary); font-size:14.5px; margin:0 0 28px; max-width:680px; }
+  h2.stagehead { font-size:12px; letter-spacing:.06em; text-transform:uppercase;
+    color:var(--text-muted); font-weight:600; margin:44px 0 10px; }
+
+  /* legend */
+  .legend { display:flex; flex-wrap:wrap; gap:16px; padding:14px 16px; margin-bottom:8px;
+    background:var(--surface-2); border:1px solid var(--hairline); border-radius:10px; font-size:12.5px; }
+  .legend .item { display:flex; align-items:center; gap:6px; color:var(--text-secondary); }
+  .dot { width:9px; height:9px; border-radius:50%; display:inline-block; flex:none; }
+
+  /* diagram */
+  .diagram { border:1px solid var(--hairline); border-radius:12px; padding:18px 20px 10px;
+    background:linear-gradient(180deg,#fff,var(--surface-2)); margin:18px 0 26px; }
+  .diagram h3 { margin:0 0 4px; font-size:14px; }
+  .diagram .note { color:var(--text-muted); font-size:12px; margin:0 0 10px; }
+  svg.pipeline-svg { width:100%; height:auto; display:block; }
+  .dg-node rect.box { fill:#fff; stroke-width:1.6; rx:10; }
+  .dg-node.code rect.box { stroke:var(--accent); }
+  .dg-node.llm rect.box { stroke:var(--llm); }
+  .dg-node.term rect.box { fill:var(--surface-2); stroke:var(--text-muted); stroke-dasharray:4 3; }
+  .dg-title { font-weight:700; font-size:13px; fill:var(--text-primary); font-family:"Fira Sans",sans-serif; }
+  .dg-file { font-size:10.5px; fill:var(--text-muted); font-family:"Fira Mono",monospace; }
+  .dg-desc { font-size:10.5px; fill:var(--text-secondary); font-family:"Fira Sans",sans-serif; }
+  .dg-tag { font-size:9px; font-weight:700; letter-spacing:.03em; font-family:"Fira Sans",sans-serif; }
+  .dg-tag.code { fill:var(--accent); }
+  .dg-tag.llm { fill:var(--llm); }
+  .dg-branch rect { fill:#fff; stroke:var(--drop); stroke-dasharray:4 3; stroke-width:1.4; rx:8; }
+  .dg-branch.alt rect { stroke:var(--text-muted); }
+  .dg-branch text { font-size:10px; fill:var(--text-secondary); font-family:"Fira Sans",sans-serif; }
+  .dg-line { stroke:#8a8a83; stroke-width:1.4; fill:none; }
+  .dg-line.drop { stroke:var(--drop); stroke-dasharray:3 2; }
+  .dg-line.alt { stroke:var(--text-muted); stroke-dasharray:3 2; }
+  .dg-bracket { stroke:var(--text-muted); stroke-width:1.2; fill:none; }
+  .dg-bracket-label { fill:var(--text-muted); font-size:10px; font-family:"Fira Sans",sans-serif; }
+
+  /* funnel */
+  .funnel { border:1px solid var(--hairline); border-radius:12px; padding:20px 22px;
+    background:linear-gradient(180deg,#fff,var(--surface-2)); margin:18px 0 8px; }
+  .funnel h3 { margin:0 0 4px; font-size:14px; }
+  .funnel .note { color:var(--text-muted); font-size:12px; margin:0 0 14px; }
+  .fstep { display:grid; grid-template-columns:150px 1fr 90px; align-items:center; gap:12px;
+    padding:7px 0; border-top:1px dashed var(--hairline); }
+  .fstep:first-child { border-top:none; }
+  .fstep .label { font-size:13px; font-weight:600; }
+  .fstep .bar-track { height:14px; background:var(--surface-3); border-radius:7px; overflow:hidden; position:relative; }
+  .fstep .bar { height:100%; background:var(--accent); border-radius:7px; }
+  .fstep .n { text-align:right; font-size:12.5px; color:var(--text-secondary); font-weight:600; }
+  .fdrop { font-size:11.5px; color:var(--drop); margin:2px 0 0 150px; }
+
+  /* stage card */
+  .stage { border:1px solid var(--hairline); border-radius:12px; margin-bottom:14px;
+    background:#fff; overflow:hidden; }
+  .stage .head { display:flex; align-items:baseline; gap:10px; padding:14px 18px 10px;
+    border-bottom:1px solid var(--hairline); flex-wrap:wrap; }
+  .stage .num { font-size:12px; font-weight:700; color:var(--text-muted); font-family:"Fira Mono",monospace; }
+  .stage .name { font-size:15.5px; font-weight:700; }
+  .stage .file { font-size:12px; color:var(--text-muted); }
+  .badge { font-size:10.5px; font-weight:600; padding:2px 8px; border-radius:20px; color:#fff;
+    letter-spacing:.02em; margin-left:auto; }
+  .badge.code { background:var(--accent); }
+  .badge.llm { background:var(--llm); }
+  .badge.mixed { background:linear-gradient(90deg,var(--accent),var(--llm)); }
+  .stage .body { padding:12px 18px 16px; font-size:13.5px; color:var(--text-secondary); line-height:1.55; }
+  .io { font-size:11.5px; color:var(--text-muted); margin-bottom:10px; }
+  .io b { color:var(--text-secondary); font-weight:600; }
+  .stage ul { margin:0; padding-left:20px; }
+  .stage li { margin-bottom:5px; }
+  .stage li .k { color:var(--param); font-weight:600; }
+  .stage li .drop { color:var(--drop); font-weight:600; }
+  .stage li .keep { color:var(--keep); font-weight:600; }
+  .stage li .llmtag { color:var(--llm); font-weight:600; }
+  .callout { font-size:12px; background:var(--surface-2); border-left:3px solid var(--param);
+    padding:8px 12px; border-radius:0 6px 6px 0; margin-top:10px; }
+  .callout.llmc { border-left-color:var(--llm); }
+  .callout.dropc { border-left-color:var(--drop); }
+
+  /* decision table */
+  table.dec { width:100%; border-collapse:collapse; font-size:12.5px; margin-top:6px; }
+  table.dec th, table.dec td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--hairline); vertical-align:top; }
+  table.dec th { color:var(--text-muted); font-weight:600; font-size:11px; text-transform:uppercase; letter-spacing:.03em; }
+  table.dec td.param { font-family:"Fira Mono",monospace; font-size:12px; color:var(--param); font-weight:600; white-space:nowrap; }
+
+  .flowdown { display:flex; justify-content:center; color:var(--text-muted); font-size:16px; margin:2px 0; }
+  footer { color:var(--text-muted); font-size:11.5px; margin-top:50px; border-top:1px solid var(--hairline); padding-top:14px; }
+  a { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Grant Topic Islands — Pipeline &amp; Decision Map</h1>
+  <p class="sub">Every stage of <code>pipeline/*.py</code>, in execution order, with the filters that
+  remove data, the parameters that shape it, and the points where a language model (rather than fixed
+  code) makes the call. Counts below are the real numbers from the currently active dataset
+  (<code>nsf-cise-21-25</code>, <code>data/processed/topics.json</code>).</p>
+
+  <div class="legend">
+    <span class="item"><span class="dot" style="background:var(--accent)"></span>deterministic code (same input → same output)</span>
+    <span class="item"><span class="dot" style="background:var(--llm)"></span>LLM judgment call (Claude, non-deterministic)</span>
+    <span class="item"><span class="dot" style="background:var(--param)"></span>tunable parameter / manual list</span>
+    <span class="item"><span class="dot" style="background:var(--drop)"></span>data dropped here</span>
+  </div>
+
+  <!-- ============ DIAGRAM ============ -->
+  <div class="diagram">
+    <h3>Pipeline at a glance</h3>
+    <p class="note">Solid arrows = main flow (code) &nbsp;·&nbsp; orange border = an LLM makes the call &nbsp;·&nbsp;
+      dashed red = data dropped here &nbsp;·&nbsp; dashed gray = alternate/unused path.</p>
+    <svg class="pipeline-svg" viewBox="0 0 760 900" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#8a8a83"/>
+        </marker>
+        <marker id="arrowDrop" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#c23b3b"/>
+        </marker>
+        <marker id="arrowAlt" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#8a8a83"/>
+        </marker>
+      </defs>
+
+      <!-- DATASET-scoped bracket (stages 0 through 4b) -->
+      <path class="dg-bracket" d="M23,15 H15 V705 H23"/>
+      <text class="dg-bracket-label" x="-345" y="6" transform="rotate(-90)" text-anchor="middle">scoped per DATASET (data/processed/&lt;DATASET&gt;/…)</text>
+
+      <!-- main trunk connectors -->
+      <line class="dg-line" x1="210" y1="75"  x2="210" y2="105" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="165" x2="210" y2="195" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="255" x2="210" y2="285" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="345" x2="210" y2="375" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="435" x2="210" y2="465" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="525" x2="210" y2="555" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="615" x2="210" y2="645" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="705" x2="210" y2="735" marker-end="url(#arrow)"/>
+      <line class="dg-line" x1="210" y1="795" x2="210" y2="825" marker-end="url(#arrow)"/>
+
+      <!-- branch connectors -->
+      <path class="dg-line drop" d="M360,45 H395 V35 H430" marker-end="url(#arrowDrop)"/>
+      <path class="dg-line drop" d="M360,225 H395 V228 H430" marker-end="url(#arrowDrop)"/>
+      <path class="dg-line alt"  d="M360,315 H395 V333 H430" marker-end="url(#arrowAlt)"/>
+
+      <!-- 0 Ingest -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="15" width="300" height="60"/>
+        <text class="dg-title" x="72" y="33">0 · Ingest</text>
+        <text class="dg-tag code" x="348" y="28" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="47">ingest.py</text>
+        <text class="dg-desc" x="72" y="61">adapter detect · drop dup / empty / short abstract</text>
+      </g>
+
+      <!-- 1 Clean -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="105" width="300" height="60"/>
+        <text class="dg-title" x="72" y="123">1 · Clean</text>
+        <text class="dg-tag code" x="348" y="118" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="137">clean.py</text>
+        <text class="dg-desc" x="72" y="151">strip boilerplate/HTML · build domain stopwords</text>
+      </g>
+
+      <!-- 1.5 Filter research -->
+      <g class="dg-node llm">
+        <rect class="box" x="60" y="195" width="300" height="60"/>
+        <text class="dg-title" x="72" y="213">1.5 · Filter Research</text>
+        <text class="dg-tag llm" x="348" y="208" text-anchor="end">LLM</text>
+        <text class="dg-file" x="72" y="227">filter_research.py</text>
+        <text class="dg-desc" x="72" y="241">Haiku classifies purpose · KEEP_TYPES policy</text>
+      </g>
+
+      <!-- 2 Keyphrase extraction -->
+      <g class="dg-node llm">
+        <rect class="box" x="60" y="285" width="300" height="60"/>
+        <text class="dg-title" x="72" y="303">2 · Keyphrase Extraction</text>
+        <text class="dg-tag llm" x="348" y="298" text-anchor="end">LLM</text>
+        <text class="dg-file" x="72" y="317">keywords_llm.py</text>
+        <text class="dg-desc" x="72" y="331">Haiku: 3–12 canonical keyphrases + salience</text>
+      </g>
+
+      <!-- 3 Cluster -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="375" width="300" height="60"/>
+        <text class="dg-title" x="72" y="393">3 · Cluster</text>
+        <text class="dg-tag code" x="348" y="388" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="407">cluster.py</text>
+        <text class="dg-desc" x="72" y="421">Ward dendrogram → 18 topics / 90 subtopics</text>
+      </g>
+
+      <!-- 3b Topic labels -->
+      <g class="dg-node llm">
+        <rect class="box" x="60" y="465" width="300" height="60"/>
+        <text class="dg-title" x="72" y="483">3b · Topic Labels</text>
+        <text class="dg-tag llm" x="348" y="478" text-anchor="end">LLM</text>
+        <text class="dg-file" x="72" y="497">label_llm.py</text>
+        <text class="dg-desc" x="72" y="511">Opus: one batched call → human-readable labels</text>
+      </g>
+
+      <!-- 4a Seed layout -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="555" width="300" height="60"/>
+        <text class="dg-title" x="72" y="573">4a · Seed Layout</text>
+        <text class="dg-tag code" x="348" y="568" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="587">seed_layout.py</text>
+        <text class="dg-desc" x="72" y="601">MDS seed coords · doc index · keyword funder</text>
+      </g>
+
+      <!-- 4b Coverage -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="645" width="300" height="60"/>
+        <text class="dg-title" x="72" y="663">4b · Coverage</text>
+        <text class="dg-tag code" x="348" y="658" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="677">coverage.py</text>
+        <text class="dg-desc" x="72" y="691">"≥1 keyphrase" rule → doc_count per node</text>
+      </g>
+
+      <!-- 5 Activate -->
+      <g class="dg-node code">
+        <rect class="box" x="60" y="735" width="300" height="60"/>
+        <text class="dg-title" x="72" y="753">5 · Activate</text>
+        <text class="dg-tag code" x="348" y="748" text-anchor="end">CODE</text>
+        <text class="dg-file" x="72" y="767">activate.py</text>
+        <text class="dg-desc" x="72" y="781">the one seam: picks which DATASET is live</text>
+      </g>
+
+      <!-- Frontend -->
+      <g class="dg-node term">
+        <rect class="box" x="60" y="825" width="300" height="50"/>
+        <text class="dg-title" x="72" y="845">Frontend</text>
+        <text class="dg-file" x="72" y="861">index.html · cards.html</text>
+      </g>
+
+      <!-- branch: dropped at ingest -->
+      <g class="dg-branch">
+        <rect x="430" y="10" width="300" height="50"/>
+        <text x="442" y="27">dropped</text>
+        <text x="442" y="42">dup title · empty / &lt;100-char abstract</text>
+      </g>
+
+      <!-- branch: excluded by classifier -->
+      <g class="dg-branch">
+        <rect x="430" y="195" width="300" height="65"/>
+        <text x="442" y="212">grants.excluded.jsonl — 841 dropped</text>
+        <text x="442" y="227">conference/travel · training · education</text>
+        <text x="442" y="241">outreach · economic development</text>
+      </g>
+
+      <!-- branch: alternate keyword extractor -->
+      <g class="dg-branch alt">
+        <rect x="430" y="310" width="300" height="45"/>
+        <text x="442" y="327">alt: keywords.py (vanilla KeyBERT)</text>
+        <text x="442" y="341">not run by the active pipeline</text>
+      </g>
+    </svg>
+  </div>
+
+  <!-- ============ FUNNEL ============ -->
+  <div class="funnel">
+    <h3>Document funnel</h3>
+    <p class="note">How many grant records survive each stage. Topics/subtopics overlap by design (see stage 3), so they don't reduce further.</p>
+
+    <div class="fstep"><div class="label">raw CSV rows</div>
+      <div class="bar-track"><div class="bar" style="width:100%"></div></div><div class="n">~4,7xx†</div></div>
+
+    <div class="fstep"><div class="label">normalized</div>
+      <div class="bar-track"><div class="bar" style="width:100%"></div></div><div class="n">4,692</div></div>
+    <div class="fdrop">− duplicate titles, empty abstracts, abstracts &lt; 100 chars</div>
+
+    <div class="fstep"><div class="label">kept: research</div>
+      <div class="bar-track"><div class="bar" style="width:82%"></div></div><div class="n">3,851</div></div>
+    <div class="fdrop">− 841 excluded by Claude Haiku classifier: 339 conference/travel · 309 training · 150 education/curriculum · 33 outreach · 10 economic development</div>
+
+    <div class="fstep"><div class="label">keyworded</div>
+      <div class="bar-track"><div class="bar" style="width:82%"></div></div><div class="n">3,851</div></div>
+    <div class="fdrop">1:1 with research docs — every kept grant gets keyphrases (0 dropped, some may get very few)</div>
+
+    <div class="fstep"><div class="label">vocab keyphrases</div>
+      <div class="bar-track"><div class="bar" style="width:56%; background:var(--param)"></div></div><div class="n">2,158</div></div>
+    <div class="fdrop">distinct keyphrase strings occurring in ≥ 3 grants (<span class="mono">MIN_DF</span>) — the clustering vocabulary, not a document count</div>
+
+    <div class="fstep"><div class="label">topics / subtopics</div>
+      <div class="bar-track"><div class="bar" style="width:8%; background:var(--param)"></div></div><div class="n">18 / 90</div></div>
+  </div>
+  <p class="note" style="margin:6px 2px 0">† raw row count is approximate — abstracts contain embedded newlines, so a plain line count over-counts; the normalizer's own tally is the source of truth (printed at run time, not persisted).</p>
+
+  <!-- ============ STAGES ============ -->
+  <h2 class="stagehead">Stage 0 — Ingest</h2>
+  <div class="stage">
+    <div class="head"><span class="num">0</span><span class="name">ingest.py</span>
+      <span class="file">data/raw/&lt;DATASET&gt;.csv → grants.normalized.jsonl</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <div class="io"><b>reads</b> raw CSV &nbsp;→&nbsp; <b>writes</b> {id, title, abstract, funder, funder_code, year} per line</div>
+      <ul>
+        <li><span class="k">decision:</span> column-header sniffing picks one of two adapters —
+          <code>legacy</code> (grant_id/agencyname/abstract) or <code>nsf_award_export</code>
+          (awd_id/corpus/div_abbr, whose true abstract is recovered by stripping the title prefix off a
+          title+abstract-concatenated <code>corpus</code> field). Unknown headers → hard error, nothing written.</li>
+        <li><span class="drop">filter:</span> drop duplicate titles (same title seen before, case-insensitive) —
+          NSF "Collaborative Research" awards are split one row per institution but share a title/abstract;
+          left in, they'd inflate downstream document-frequency counts.</li>
+        <li><span class="drop">filter:</span> drop rows with empty abstract, or abstract
+          <span class="k">&lt; MIN_ABSTRACT_CHARS = 100</span> chars (too little topical signal).</li>
+        <li>funder name normalized (e.g. strips "‑ SubAward" suffix); year parsed and range-checked to 1950–2100 or left null.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 1 — Clean</h2>
+  <div class="stage">
+    <div class="head"><span class="num">1</span><span class="name">clean.py</span>
+      <span class="file">grants.normalized.jsonl → grants.clean.jsonl + stopwords.txt</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <div class="io"><b>reads</b> normalized docs &nbsp;→&nbsp; <b>writes</b> cleaned abstract text + a corpus-specific stopword list consumed by stage 2</div>
+      <ul>
+        <li>HTML/entity sanitation: literal tags and upstream "and‑mangled" entities (<code>andlt</code> for <code>&amp;lt;</code>) removed as one unit so a real "Br" (bromine) isn't eaten.</li>
+        <li>strips the leading <code>&lt;award_id&gt; &lt;PI name(s)&gt;</code> header NSF abstracts carry, and boilerplate review-criteria sentences ("intellectual merit and broader impacts...").</li>
+        <li><span class="k">decision (data-driven):</span> any term appearing in ≥ <span class="k">HIGH_DF = 30%</span> of abstracts is grant-generic filler → added to the domain stoplist for stage 2's KeyBERT vectorizer (not used by the current LLM-based stage 2, see below).</li>
+        <li><span class="k">manual list:</span> a curated <code>SEED_STOPWORDS</code> set (research, project, study, pi, nsf, university, intellectual, merit, ...) is unioned in regardless of frequency.</li>
+        <li><span class="k">manual override:</span> a <code>PROTECT</code> set (data, systems, gene, protein, model, ...) is exempted even if high-DF — generic alone, but the backbone of real keyphrases like "data science".</li>
+      </ul>
+      <div class="callout">Note: stage 1's stopword list only feeds the <em>vanilla KeyBERT</em> extractor
+        (<code>keywords.py</code>). The pipeline currently in the README uses the LLM extractor
+        (<code>keywords_llm.py</code>), which filters generic language via prompt instructions instead — see Stage 2.</div>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 1.5 — Filter to research grants <span style="color:var(--llm)">(LLM decision)</span></h2>
+  <div class="stage">
+    <div class="head"><span class="num">1.5</span><span class="name">filter_research.py</span>
+      <span class="file">grants.clean.jsonl → grants.research.jsonl (kept) / grants.excluded.jsonl (dropped)</span>
+      <span class="badge llm">LLM</span></div>
+    <div class="body">
+      <div class="io"><b>model</b> claude-haiku-4-5, one classification call per grant (Message Batches API) &nbsp;·&nbsp; <b>reads</b> title + first 1,500 chars of abstract</div>
+      <ul>
+        <li><span class="llmtag">LLM call:</span> classifies each grant's PRIMARY purpose into one of 9 categories: research, tool_or_infrastructure, evaluation_research, training, conference_or_travel, education_or_curriculum, outreach_or_broadening_participation, economic_development, other.</li>
+        <li><span class="k">policy in code, not the model:</span> <code>KEEP_TYPES = {research, tool_or_infrastructure, evaluation_research}</code> — the model only returns a category, this constant decides what survives. Changing the policy (stricter, or "flag for review") needs no re-classification.</li>
+        <li><span class="drop">filter:</span> everything else is moved to <code>grants.excluded.jsonl</code> with the model's category + a ≤12‑word rationale — the record is never destroyed, just set aside.</li>
+        <li>a grant the model fails to classify (bad JSON, API error) is <b>kept</b> as a fallback rather than silently dropped.</li>
+      </ul>
+      <div class="callout llmc">This is the largest content-based filter in the pipeline: 841 of 4,692 grants (18%) dropped here in the active dataset — mostly conference/travel and training awards.</div>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 2 — Keyphrase extraction <span style="color:var(--llm)">(LLM decision, active path)</span></h2>
+  <div class="stage">
+    <div class="head"><span class="num">2</span><span class="name">keywords_llm.py</span>
+      <span class="file">grants.research.jsonl → grants.keywords.jsonl</span>
+      <span class="badge llm">LLM</span></div>
+    <div class="body">
+      <div class="io"><b>model</b> claude-haiku-4-5, one call per grant &nbsp;·&nbsp; <b>reads</b> title + first 2,500 chars of abstract</div>
+      <ul>
+        <li><span class="llmtag">LLM call:</span> returns 3–12 keyphrases (fewer if the abstract has little specific content — the model is told never to invent filler), each with a 1–5 salience rating.</li>
+        <li><span class="llmtag">prompt rule:</span> exclude generic grant/admin language (research, objectives, broader impacts, workforce, outreach…), institution names, people, places, and program names (CAREER, REU, GRFP…).</li>
+        <li><span class="llmtag">prompt rule — canonicalization:</span> lowercase, singular, standardized acronyms (expand "ML" → "machine learning"; keep universal ones like "dna", "mri"), variants merged to one form — this is what keeps stage 3's vocabulary from fragmenting.</li>
+        <li>score stored = salience / 5 (so 0.2–1.0), same schema as the alternate KeyBERT path so downstream stages don't care which extractor ran.</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2 class="stagehead" style="margin-top:20px; opacity:.75">Stage 2 (alternate, not in the active pipeline)</h2>
+  <div class="stage" style="opacity:.7">
+    <div class="head"><span class="num">2′</span><span class="name">keywords.py</span>
+      <span class="file">grants.clean.jsonl + stopwords.txt → grants.keywords.jsonl</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <div class="io">deterministic KeyBERT extraction — kept for comparison, not run by the README's current pipeline order</div>
+      <ul>
+        <li>embedder <code class="mono">intfloat/e5-large-v2</code>; candidates restricted to grammatical noun phrases via spaCy POS pattern <code>&lt;J.*&gt;*&lt;N.*&gt;+</code> (KeyphraseVectorizers), avoiding "word salad".</li>
+        <li>stopwords = sklearn English list ∪ stage 1's domain stoplist. <span class="k">TOP_N = 15</span> keyphrases/doc, MMR <span class="k">DIVERSITY = 0.5</span> to reduce near-duplicates.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 3 — Hierarchical clustering</h2>
+  <div class="stage">
+    <div class="head"><span class="num">3</span><span class="name">cluster.py</span>
+      <span class="file">grants.keywords.jsonl → topics.json + topic_centroids.npy</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <div class="io"><b>embedder</b> all-MiniLM-L6-v2 &nbsp;·&nbsp; one Ward-linkage dendrogram, cut twice for strict nesting</div>
+      <ul>
+        <li><span class="drop">filter:</span> vocabulary = keyphrases with document frequency ≥ <span class="k">MIN_DF = 3</span> — a phrase only one or two grants use is dropped from clustering (it still exists on its source grants, just isn't a cluster-forming term). 2,158 of the full keyphrase set qualify in the active dataset.</li>
+        <li><span class="k">parameter:</span> the same dendrogram is cut at <span class="k">N_TOP = 18</span> (level‑1 topics) and <span class="k">N_SUB = 90</span> (level‑2 subtopics) via <code>fcluster(..., criterion="maxclust")</code> — one tree, two cut heights, so every subtopic nests inside exactly one topic by construction.</li>
+        <li>each cluster's label comes from class-based TF‑IDF over its member keyphrases' tokens (BERTopic-style: frequent-in-cluster, rare-in-siblings) — <span class="k">LABEL_TERMS = 6</span> terms kept, top 3 form the c‑TF‑IDF label (superseded for display by stage 3b's LLM label).</li>
+        <li>topics ordered by aggregate keyword score (biggest first); each node also carries a funder mix (share of docs by funder code).</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 3b — Topic labels <span style="color:var(--llm)">(LLM decision, cosmetic only)</span></h2>
+  <div class="stage">
+    <div class="head"><span class="num">3b</span><span class="name">label_llm.py</span>
+      <span class="file">topics.json → topics.json (adds llm_label)</span>
+      <span class="badge llm">LLM</span></div>
+    <div class="body">
+      <div class="io"><b>model</b> claude-opus-4-8, a single structured-output call for <em>all</em> clusters at once (18 + 90 = 108 nodes)</div>
+      <ul>
+        <li><span class="llmtag">LLM call:</span> given each cluster's c-TF-IDF terms + top 10 member keywords, returns a 2–5 word Title Case label naming the actual research area — or plainly flags administrative/non-research clusters ("Program Administration", "Place Names") rather than forcing a research-sounding name onto noise.</li>
+        <li>doesn't change which documents belong where — <code>label</code> (c‑TF‑IDF) is kept alongside <code>llm_label</code>; only display labelling is affected.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 4a — Seed layout &amp; doc index</h2>
+  <div class="stage">
+    <div class="head"><span class="num">4a</span><span class="name">seed_layout.py</span>
+      <span class="file">topics.json + topic_centroids.npy + grants.keywords.jsonl → topics.json</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <ul>
+        <li><span class="k">method choice:</span> 2D layout via MDS on cosine distance between the 18 topic centroids — not UMAP, because UMAP is unstable with that few points, while MDS on a precomputed distance matrix is deterministic (fixed <code class="mono">random_state=42</code>) and appropriate at this scale.</li>
+        <li>coordinates scaled to [0,1] — this is the semantic "seed" position islands start from in the frontend layout.</li>
+        <li>builds the <code>docs</code> metadata index (title/funder/year/abstract) for every grant referenced by any surviving keyword, and tags each keyword leaf with its dominant funder (majority vote over its source docs) for the frontend's funder colouring.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 4b — Document coverage</h2>
+  <div class="stage">
+    <div class="head"><span class="num">4b</span><span class="name">coverage.py</span>
+      <span class="file">topics.json + grants.keywords.jsonl → topics.json</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <ul>
+        <li><span class="k">decision rule:</span> a grant is "covered by" a subtopic if it contains ≥ 1 of that subtopic's keyphrases (union / "at least one" rule, not majority or exclusive assignment) — so a grant can, and often does, count toward several subtopics and topics.</li>
+        <li>consequence: topic <code>doc_count</code> values sum to <em>more</em> than the total document count (overlap by design); a topic's own count is exactly the union of its subtopics' doc sets (nesting still holds even though sibling topics overlap).</li>
+        <li>computed from the full (uncapped) keyword→document links, because each keyword's stored <code>docs</code> list is capped at 50 in the JSON the browser loads — this recomputation is why the stage exists as a separate offline step.</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="flowdown">↓</div>
+
+  <h2 class="stagehead">Stage 5 — Activate</h2>
+  <div class="stage">
+    <div class="head"><span class="num">5</span><span class="name">activate.py</span>
+      <span class="file">data/processed/&lt;DATASET&gt;/topics.json → data/processed/topics.json</span>
+      <span class="badge code">code</span></div>
+    <div class="body">
+      <ul>
+        <li><span class="k">decision:</span> the frontend always fetches the one fixed path <code>data/processed/topics.json</code>; every other stage is scoped per‑<code>DATASET</code>, so several datasets' full artifact chains can sit on disk simultaneously. This script is the single seam that decides which one is "live" — it's a plain file copy, no recomputation.</li>
+        <li>switching datasets (e.g. back to the original <code>grants</code> corpus) is just re-running this one script with a different <code>DATASET</code> — nothing upstream needs to re-run.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ============ ALL TUNABLE KNOBS ============ -->
+  <h2 class="stagehead">All tunable parameters &amp; manual lists, in one place</h2>
+  <table class="dec">
+    <tr><th>stage</th><th>parameter</th><th>value</th><th>effect</th></tr>
+    <tr><td>0 ingest</td><td class="param">MIN_ABSTRACT_CHARS</td><td>100</td><td>drops abstracts shorter than this</td></tr>
+    <tr><td>1 clean</td><td class="param">HIGH_DF</td><td>0.30</td><td>doc-frequency cutoff for auto-stopwording (feeds the unused KeyBERT path)</td></tr>
+    <tr><td>1 clean</td><td class="param">SEED_STOPWORDS / PROTECT</td><td>curated sets</td><td>manual override on top of the data-driven cutoff</td></tr>
+    <tr><td>1.5 filter</td><td class="param">KEEP_TYPES</td><td>{research, tool_or_infrastructure, evaluation_research}</td><td>which LLM-assigned categories survive — the actual research/non-research policy</td></tr>
+    <tr><td>2 keywords</td><td class="param">ABSTRACT_CHARS</td><td>2,500</td><td>how much abstract text the LLM sees per grant</td></tr>
+    <tr><td>3 cluster</td><td class="param">MIN_DF</td><td>3</td><td>drops rare keyphrases from the clustering vocabulary</td></tr>
+    <tr><td>3 cluster</td><td class="param">N_TOP / N_SUB</td><td>18 / 90</td><td>how many topics / subtopics the dendrogram is cut into</td></tr>
+    <tr><td>3 cluster</td><td class="param">LABEL_TERMS</td><td>6 (top 3 shown)</td><td>size of the c-TF-IDF label</td></tr>
+    <tr><td>4b coverage</td><td class="param">"≥ 1 keyphrase" rule</td><td>—</td><td>defines topic/subtopic membership; not a numeric knob but the core inclusion policy</td></tr>
+  </table>
+
+  <footer>
+    Generated by tracing <code>pipeline/*.py</code> against the run currently published to
+    <code>data/processed/topics.json</code> (dataset <code>nsf-cise-21-25</code>). Counts will differ
+    for other datasets or after re-running LLM stages, since those calls are non-deterministic.
+    See <a href="../README.md">README.md</a> for run commands and <a href="../PLAN.md">PLAN.md</a> for design rationale.
+  </footer>
+</div>
+</body>
+</html>

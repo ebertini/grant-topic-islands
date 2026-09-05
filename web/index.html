@@ -27,6 +27,8 @@
   #crumbs .c.here { color:var(--text-primary); cursor:default; font-weight:600; }
   #crumbs .sep { color:var(--text-muted); }
   .controls { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  #datasetSel { font:inherit; font-size:12px; padding:4px 8px; border:1px solid var(--hairline);
+    border-radius:6px; background:var(--surface-1); color:var(--text-primary); cursor:pointer; }
   .btn { font:inherit; font-size:12px; padding:4px 10px; border:1px solid var(--hairline);
     background:var(--surface-1); border-radius:6px; cursor:pointer; color:var(--text-secondary); }
   .btn:hover { border-color:var(--text-muted); }
@@ -49,6 +51,18 @@
   .kw-g.sel .kw-card { stroke:var(--accent); }
   .kw-g.sel .kw-text { fill:var(--accent); font-weight:700; }
   .kw-text { text-anchor:middle; dominant-baseline:central; }
+  .pager-label { fill:var(--text-muted); }
+  .pager-btn { cursor:pointer; }
+  .pager-btn circle { fill:var(--surface-2); stroke:var(--hairline); stroke-width:1; }
+  .pager-btn text { fill:var(--text-secondary); }
+  .pager-btn:hover circle { stroke:var(--accent); }
+  .pager-btn:hover text { fill:var(--accent); }
+  .pager-btn.disabled { cursor:default; opacity:.3; }
+  .spark-bg { fill:var(--accent); opacity:0; }
+  .kw-g:hover .spark-bg, .kw-g.sel .spark-bg { opacity:.08; }
+  #timelineLegend { display:none; align-items:center; gap:6px; font-size:11px; color:var(--text-muted); }
+  #timelineLegend.on { display:flex; }
+  #timelineLegend .ramp { width:70px; height:8px; border-radius:2px; }
   #panel { grid-column:2; grid-row:2; border-left:1px solid var(--hairline); background:var(--surface-1);
     padding:14px 16px; overflow-y:auto; font-size:13px; }
   #panel h2 { font-size:14px; margin:0 0 2px; }
@@ -74,6 +88,13 @@
   <header>
     <h1>Grant Topic Islands</h1>
     <nav id="crumbs"></nav>
+    <div class="controls">
+      <select id="datasetSel"></select>
+      <button id="scaleFreqBtn" class="btn">Scale by frequency</button>
+      <button id="gridBtn" class="btn">Grid layout</button>
+      <div id="timelineLegend"><span id="legendLo"></span><span class="ramp"></span><span id="legendHi"></span></div>
+      <button id="timelineBtn" class="btn">Show timeline</button>
+    </div>
   </header>
   <div id="stage">
     <svg id="svg"></svg>
@@ -86,15 +107,53 @@
 <script type="module">
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-const data=await fetch("../data/processed/topics.json").then(r=>r.json());
-const docs=data.docs||{};
-const topicById=new Map(data.topics.map(t=>[t.id,t]));
+const DATA_DIR="../data/processed";   // swapped to "." by the docs/ deploy build
+
+// ---- dataset-dependent state — (re)assigned by loadDataset() on load/switch ----
+let data, docs, topicById;
+let EXCLUDED_YEARS, YEARS;
+let histCache;
+let GLOBAL_MAX_COUNT;
+
+// per-keyword per-year histogram, cached
+function yearHist(k){
+  if(histCache.has(k.text)) return histCache.get(k.text);
+  const counts=new Map(YEARS.map(y=>[y,0]));
+  (k.docs||[]).forEach(id=>{const d=docs[id]; if(d&&d.year&&counts.has(d.year)) counts.set(d.year,counts.get(d.year)+1);});
+  const arr=YEARS.map(y=>({year:y,count:counts.get(y)||0}));
+  histCache.set(k.text,arr);
+  return arr;
+}
+
+// Viridis, reversed so darker = higher count (its native direction runs dark-low/bright-high).
+// LIGHT_FLOOR keeps any nonzero count from fading near-white, so it doesn't read as the
+// true-empty (zero-grant) tile, which is drawn as a flat neutral gray instead of a scale color.
+const LIGHT_FLOOR=0.16;
+function scaleAt(t){
+  const tt=LIGHT_FLOOR+(1-LIGHT_FLOOR)*Math.max(0,Math.min(1,t));
+  return d3.interpolateViridis(1-tt);
+}
+const countColor=count=>count>0?scaleAt(count/GLOBAL_MAX_COUNT):"var(--hairline)";
+
+let showTimeline=false;
+let gridLayout=false;
+const SPARK_W=130, SPARK_H=12, SPARK_GAP=4, SPARK_CELL_GAP=0.6;
+
+// "Scale by frequency": term font size encodes doc_freq on ONE global scale (built from every
+// keyword in the dataset — top-level AND subtopic-level share the same pool of keyword objects
+// and the same domain), so a card's size means the same grant count everywhere: comparable
+// across topics, and just as active when drilled into a single subtopic.
+let scaleByFreq=false;
+const MIN_FS=9, MAX_FS=64;
+// exponent < 0.5 (vs. a plain sqrt scale) spreads out the low/mid end more aggressively, so
+// differences stay visible for subtopic-level terms whose counts are far below the dataset's
+// single biggest keyword, not just for the handful of terms near the global max.
+let GLOBAL_MAX_DOC_FREQ, fsScale;
+const fsFor=k=>scaleByFreq?fsScale(k.doc_freq):KW_FS;
 
 // every keyphrase used in the visualization -> regex, for highlighting inside abstracts
-const allKw=new Set();
-data.topics.forEach(t=>t.subtopics.forEach(s=>s.keywords.forEach(k=>allKw.add(k.text))));
+let allKw, KW_RE;
 const escapeRe=s=>s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
-const KW_RE=new RegExp("\\b(?:"+[...allKw].sort((a,b)=>b.length-a.length).map(escapeRe).join("|")+")\\b","gi");
 const highlightAbstract=(text,sel)=>esc(text).replace(KW_RE,
   m=>`<mark class="${m.toLowerCase()===sel?"kw-sel":"kw-hit"}">${m}</mark>`);
 
@@ -102,8 +161,8 @@ const W=1600,H=1000,MARGIN=180;
 const sx=d3.scaleLinear([0,1],[MARGIN,W-MARGIN]);
 const sy=d3.scaleLinear([0,1],[MARGIN,H-MARGIN]);
 const KW_FS=18;         // uniform keyphrase size (coverage is too flat across terms to scale by)
-const OVERVIEW_KW=5;    // top keyphrases (by coverage) shown per group
-const SUB_KW=5;
+const PAGE_SIZE=5;      // keyphrases shown at once per group; the rest are paged through
+const ROW_GAP=4, PAGER_GAP=8, PAGER_H=20, PAGER_BTN_R=9;
 
 const measure=document.createElement("canvas").getContext("2d");
 const PADX=10, PADY=5.5, RX=4;
@@ -112,7 +171,7 @@ const cardBox=(t,fs)=>{measure.font=`600 ${fs}px "Fira Sans",sans-serif`;
 
 const svg=d3.select("#svg").attr("viewBox",[0,0,W,H]);
 const vp=svg.append("g");
-const gTitle=vp.append("g"), gNode=vp.append("g");
+const gTitle=vp.append("g"), gNode=vp.append("g"), gPager=vp.append("g");
 const defs=svg.append("defs");
 defs.append("filter").attr("id","cardShadow").attr("x","-40%").attr("y","-40%").attr("width","180%").attr("height","180%")
   .append("feDropShadow").attr("dx",0).attr("dy",1.2).attr("stdDeviation",2.4).attr("flood-color","#2a2a28").attr("flood-opacity",0.16);
@@ -124,42 +183,89 @@ svg.on("click",()=>goUp());
 
 let path=[];              // [] overview (topics) | [topicId] (subtopics of a topic)
 let selectedEl=null, selKwText=null;
+const pageOf=new Map();   // group id -> current page index (persists while the app is open)
 
-/* ---------- keyphrase selection per group ---------- */
-const topTopicKws=t=>{
+/* ---------- keyphrase selection per group (FULL sorted list; paging slices it) ---------- */
+const topicKwsFull=t=>{
   const m=new Map();
   t.subtopics.forEach(s=>s.keywords.forEach(k=>{ if(!m.has(k.text)||k.doc_freq>m.get(k.text).doc_freq) m.set(k.text,k); }));
-  return [...m.values()].sort((a,b)=>b.doc_freq-a.doc_freq).slice(0,OVERVIEW_KW);
+  return [...m.values()].sort((a,b)=>b.doc_freq-a.doc_freq);
 };
-const subKws=s=>[...s.keywords].sort((a,b)=>b.doc_freq-a.doc_freq).slice(0,SUB_KW);
+const subKwsFull=s=>[...s.keywords].sort((a,b)=>b.doc_freq-a.doc_freq);
 
 /* ---------- local layout of one keyphrase cloud around (0,0) ---------- */
-// vertical centered stack: cards ordered by coverage (biggest on top), stacked without overlap
-function layoutStack(kws){
-  const nodes=[...kws].sort((a,b)=>b.doc_freq-a.doc_freq)
-    .map(k=>({k,label:k.text,fs:KW_FS,funder:k.funder}));
-  nodes.forEach(n=>n.box=cardBox(n.label,n.fs));
-  const GAP=4; let y=0, maxW=0;
-  nodes.forEach(n=>{ n.x=0; n.y=y+n.box.h/2; y+=n.box.h+GAP; maxW=Math.max(maxW,n.box.w); });
-  const height=Math.max(0,y-GAP);
-  nodes.forEach(n=>n.y-=height/2);   // center the stack on the group point
-  return {nodes,width:maxW,height};
+// vertical centered stack of the current page's cards, plus a reserved pager row.
+// Width/height are sized from the FULL list (not just the visible page), so a
+// group's footprint never changes when paging -> neighbors never have to re-simulate.
+// Order is always by doc_freq (set by topicKwsFull/subKwsFull) — the timeline adds a sparkline
+// per row, it doesn't change which terms rank where.
+function layoutStack(fullSorted,page){
+  const total=fullSorted.length;
+  const pageCount=Math.max(1,Math.ceil(total/PAGE_SIZE));
+  page=Math.max(0,Math.min(page,pageCount-1));
+  const visible=fullSorted.slice(page*PAGE_SIZE,page*PAGE_SIZE+PAGE_SIZE);
+  const nodes=visible.map(k=>{const fs=fsFor(k); return {k,label:k.text,fs,funder:k.funder,box:cardBox(k.text,fs),
+    hist:showTimeline?yearHist(k):null};});
+  // Row slot height is reserved from THIS group's own largest card (fullSorted[0], since the list
+  // is doc_freq-sorted — the biggest card, scaled or not, is always first), not the global max —
+  // otherwise every group would waste space to match the single most-frequent term anywhere.
+  const maxFsHere=fullSorted.length?fsFor(fullSorted[0]):KW_FS;
+  // row reserves extra height for the sparkline (+gap) when the timeline is on, and rows get
+  // more breathing room so it stays unambiguous which sparkline belongs to which term.
+  const rowH=maxFsHere+2*PADY+(showTimeline?SPARK_GAP+SPARK_H:0);
+  const rowGap=showTimeline?16:ROW_GAP;
+  const stackH=PAGE_SIZE*rowH+(PAGE_SIZE-1)*rowGap;          // reserved for a full page
+  const hasPager=total>PAGE_SIZE;
+  const height=stackH+(hasPager?PAGER_GAP+PAGER_H:0);
+  const top=-height/2;
+  nodes.forEach((n,i)=>{ n.x=0; n.y=top+i*(rowH+rowGap)+rowH/2; });
+  const width=fullSorted.length
+    ?Math.max(showTimeline?SPARK_W:0,...fullSorted.map(k=>cardBox(k.text,fsFor(k)).w)):0;
+  const pagerY=top+stackH+PAGER_GAP+PAGER_H/2;
+  return {nodes,width,height,total,page,pageCount,hasPager,pagerY};
 }
 
 /* ---------- build groups for the current level ---------- */
 function buildGroups(){
   if(path.length===0)
     return data.topics.map(t=>({id:t.id,title:t.llm_label,funder:Object.keys(t.funder_mix)[0],
-      seed:t.seed,cloud:layoutStack(topTopicKws(t)),drill:true}));
+      seed:t.seed,cloud:layoutStack(topicKwsFull(t),pageOf.get(t.id)||0),drill:true}));
   const t=topicById.get(path[0]);
   return t.subtopics.map(s=>({id:s.id,title:s.llm_label,funder:Object.keys(s.funder_mix)[0],
-    cloud:layoutStack(subKws(s)),drill:false}));
+    cloud:layoutStack(subKwsFull(s),pageOf.get(s.id)||0),drill:false}));
 }
 
 /* ---------- position the groups, then place keyphrases absolutely ---------- */
+// Row-wise grid: islands keep their natural (data) order, laid out left-to-right/top-to-bottom.
+// Column widths and row heights are each sized to their largest member, so every island in a
+// column shares the same horizontal center and every island in a row shares the same vertical
+// band — real alignment, not just a uniform-cell approximation.
+function gridArrange(groups){
+  const GAP=40;
+  const n=groups.length;
+  const cols=Math.max(1,Math.round(Math.sqrt(n*(W/H))));
+  const rows=Math.ceil(n/cols);
+  groups.forEach(g=>{ g.gw=g.cloud.width+40; g.gh=g.cloud.height+80; });   // +title & breathing room
+  const colW=new Array(cols).fill(0), rowH=new Array(rows).fill(0);
+  groups.forEach((g,i)=>{
+    const c=i%cols, r=Math.floor(i/cols);
+    colW[c]=Math.max(colW[c],g.gw);
+    rowH[r]=Math.max(rowH[r],g.gh);
+  });
+  const colX=[0]; for(let c=1;c<cols;c++) colX.push(colX[c-1]+colW[c-1]+GAP);
+  const rowY=[0]; for(let r=1;r<rows;r++) rowY.push(rowY[r-1]+rowH[r-1]+GAP);
+  groups.forEach((g,i)=>{
+    const c=i%cols, r=Math.floor(i/cols);
+    g.x=colX[c]+colW[c]/2;
+    g.y=rowY[r]+rowH[r]/2;
+  });
+}
+
 function positionGroups(groups){
   groups.forEach(g=>g.r=0.5*Math.hypot(g.cloud.width,g.cloud.height)+22);   // +space for the title
-  if(path.length===0){
+  if(gridLayout){
+    gridArrange(groups);
+  } else if(path.length===0){
     groups.forEach(g=>{g.x=sx(g.seed[0]);g.y=sy(g.seed[1]);});
     const sim=d3.forceSimulation(groups)
       .force("x",d3.forceX(g=>sx(g.seed[0])).strength(.12))
@@ -177,13 +283,14 @@ function positionGroups(groups){
 }
 
 /* ---------- render ---------- */
-function render(){
+function render(refit=true){
   const groups=buildGroups();
   positionGroups(groups);
-  drawTitles(groups); drawKeyphrases(groups); drawCrumbs();
+  drawTitles(groups); drawKeyphrases(groups); drawPagers(groups); drawCrumbs();
   gTitle.style("opacity",0).transition().duration(300).style("opacity",1);
   gNode.style("opacity",0).transition().duration(300).style("opacity",1);
-  fit(groups);
+  gPager.style("opacity",0).transition().duration(300).style("opacity",1);
+  if(refit) fit(groups);   // only re-fit the viewport on level changes, not on a page turn
 }
 
 function drawTitles(groups){
@@ -212,6 +319,60 @@ function drawKeyphrases(groups){
   g.append("text").attr("class","kw-text").attr("font-size",n=>n.fs)
     .attr("font-weight",600).style("fill","var(--kw-blue)")
     .text(n=>n.label);
+
+  if(showTimeline){
+    g.each(function(n){
+      const sel=d3.select(this);
+      const sg=sel.append("g").attr("class","spark")
+        .attr("transform",`translate(${-SPARK_W/2},${n.box.h/2+SPARK_GAP})`);
+      const cw=SPARK_W/n.hist.length;
+      sg.append("rect").attr("class","spark-bg")
+        .attr("x",-4).attr("y",-3).attr("width",SPARK_W+8).attr("height",SPARK_H+6).attr("rx",3);
+      sg.selectAll("rect.spark-cell").data(n.hist).join("rect")
+        .attr("class","spark-cell")
+        .attr("x",(d,i)=>i*cw+SPARK_CELL_GAP/2)
+        .attr("width",Math.max(0.4,cw-SPARK_CELL_GAP))
+        .attr("y",0).attr("height",SPARK_H)
+        .attr("fill",d=>countColor(d.count))
+        .on("mouseover",(e,d)=>{ e.stopPropagation(); tip(e,`${n.label} · ${d.year} · ${d.count} grant${d.count===1?"":"s"}`); })
+        .on("mousemove",(e,d)=>{ e.stopPropagation(); tip(e,`${n.label} · ${d.year} · ${d.count} grant${d.count===1?"":"s"}`); })
+        .on("mouseout",()=>hideTip());
+    });
+  }
+}
+
+// prev/next chevrons + an "x–y of N" counter, shown only when a group has more
+// keyphrases than fit on one page. Sorted by coverage (doc_freq), same order as the cards.
+function drawPagers(groups){
+  gPager.selectAll("*").remove();
+  const withPager=groups.filter(g=>g.cloud.hasPager);
+  const rows=gPager.selectAll("g.pager").data(withPager,g=>g.id).join("g")
+    .attr("class","pager")
+    .attr("transform",g=>`translate(${g.x},${g.y+g.cloud.pagerY})`);
+
+  rows.each(function(g){
+    const row=d3.select(this);
+    const {page,pageCount,total}=g.cloud;
+    const start=page*PAGE_SIZE+1, end=Math.min(total,start+PAGE_SIZE-1);
+    measure.font=`500 11px "Fira Sans",sans-serif`;
+    const label=`${start}–${end} of ${total}`;
+    const halfW=measure.measureText(label).width/2+8+PAGER_BTN_R;
+
+    row.append("text").attr("class","pager-label").attr("text-anchor","middle")
+      .attr("dominant-baseline","central").attr("font-size",11).text(label);
+
+    const mkBtn=(dx,glyph,enabled,onClick)=>{
+      const btn=row.append("g").attr("class","pager-btn"+(enabled?"":" disabled"))
+        .attr("transform",`translate(${dx},0)`);
+      btn.append("circle").attr("r",PAGER_BTN_R);
+      btn.append("text").attr("text-anchor","middle").attr("dominant-baseline","central")
+        .attr("font-size",11).text(glyph);
+      if(enabled) btn.on("click",e=>{e.stopPropagation();onClick();});
+      return btn;
+    };
+    mkBtn(-halfW,"▲",page>0,()=>{pageOf.set(g.id,page-1);render(false);});
+    mkBtn(halfW,"▼",page<pageCount-1,()=>{pageOf.set(g.id,page+1);render(false);});
+  });
 }
 
 function fit(groups){
@@ -270,8 +431,90 @@ const tip=(e,text)=>{const r=stage.getBoundingClientRect();tt.style.left=(e.clie
   tt.style.top=(e.clientY-r.top)+"px";tt.textContent=text;tt.style.opacity=1;};
 const hideTip=()=>tt.style.opacity=0;
 
+function updateTimelineLegend(){
+  document.getElementById("legendLo").textContent="0";
+  document.getElementById("legendHi").textContent=GLOBAL_MAX_COUNT+"/yr";
+  document.querySelector("#timelineLegend .ramp").style.background=
+    `linear-gradient(to right, ${d3.range(0,1.0001,0.1).map(scaleAt).join(",")})`;
+}
+
+const timelineBtn=document.getElementById("timelineBtn");
+const timelineLegend=document.getElementById("timelineLegend");
+timelineBtn.onclick=()=>{
+  showTimeline=!showTimeline;
+  timelineBtn.classList.toggle("on",showTimeline);
+  timelineBtn.textContent=showTimeline?"Hide timeline":"Show timeline";
+  timelineLegend.classList.toggle("on",showTimeline);
+  render();
+};
+
+const scaleFreqBtn=document.getElementById("scaleFreqBtn");
+scaleFreqBtn.onclick=()=>{
+  scaleByFreq=!scaleByFreq;
+  scaleFreqBtn.classList.toggle("on",scaleByFreq);
+  render();
+};
+
+const gridBtn=document.getElementById("gridBtn");
+gridBtn.onclick=()=>{
+  gridLayout=!gridLayout;
+  gridBtn.classList.toggle("on",gridLayout);
+  render();
+};
+
+/* ---------- dataset loading + the live dataset switcher ---------- */
+async function loadDataset(entry){
+  data=await fetch(`${DATA_DIR}/${entry.file}`).then(r=>r.json());
+  docs=data.docs||{};
+  topicById=new Map(data.topics.map(t=>[t.id,t]));
+
+  EXCLUDED_YEARS=new Set(entry.excluded_years||[]);
+  const ys=Object.values(docs).map(d=>d.year).filter(Boolean);
+  YEARS=d3.range(d3.min(ys),d3.max(ys)+1).filter(y=>!EXCLUDED_YEARS.has(y));
+  histCache=new Map();
+
+  let maxCount=0;
+  data.topics.forEach(t=>t.subtopics.forEach(s=>s.keywords.forEach(k=>{
+    const m=d3.max(yearHist(k),d=>d.count);
+    if(m>maxCount) maxCount=m;
+  })));
+  GLOBAL_MAX_COUNT=maxCount||1;
+
+  let maxDf=0;
+  allKw=new Set();
+  data.topics.forEach(t=>t.subtopics.forEach(s=>s.keywords.forEach(k=>{
+    allKw.add(k.text);
+    if(k.doc_freq>maxDf) maxDf=k.doc_freq;
+  })));
+  GLOBAL_MAX_DOC_FREQ=maxDf||1;
+  fsScale=d3.scalePow([1,GLOBAL_MAX_DOC_FREQ],[MIN_FS,MAX_FS]).exponent(0.35).clamp(true);
+  KW_RE=new RegExp("\\b(?:"+[...allKw].sort((a,b)=>b.length-a.length).map(escapeRe).join("|")+")\\b","gi");
+
+  path=[]; selectedEl=null; selKwText=null; pageOf.clear();
+  panel.innerHTML=`<div class="empty">Click a keyphrase to see the grants it appears in.</div>`;
+
+  updateTimelineLegend();
+  render();
+}
+
+const datasetSel=document.getElementById("datasetSel");
+const manifest=await fetch(`${DATA_DIR}/manifest.json`).then(r=>r.json());
+manifest.forEach(e=>{
+  const opt=document.createElement("option");
+  opt.value=e.id; opt.textContent=`${e.label} (${e.n_docs.toLocaleString()} grants)`;
+  datasetSel.appendChild(opt);
+});
+const savedId=localStorage.getItem("gti_dataset");
+const initialEntry=manifest.find(e=>e.id===savedId)||manifest[0];
+datasetSel.value=initialEntry.id;
+datasetSel.onchange=()=>{
+  const entry=manifest.find(e=>e.id===datasetSel.value);
+  localStorage.setItem("gti_dataset",entry.id);
+  loadDataset(entry);
+};
+
 try{ await document.fonts.load('600 24px "Fira Sans"'); await document.fonts.load('500 18px "Fira Sans"'); }catch(e){}
-render();
+await loadDataset(initialEntry);
 </script>
 </body>
 </html>

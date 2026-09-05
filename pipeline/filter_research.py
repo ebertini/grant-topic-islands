@@ -13,14 +13,18 @@ Method: one Haiku call per grant via the Message Batches API (50% cheaper,
 built for large one-time offline jobs). Requires Anthropic credentials
 (ANTHROPIC_API_KEY or `ant auth login`).
 
-Input:  data/processed/grants.clean.jsonl
-Output: data/processed/grants.research.jsonl    (kept — feeds keyword extraction)
-        data/processed/grants.excluded.jsonl    (removed, with type + rationale)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/grants.clean.jsonl
+Output: data/processed/<DATASET>/grants.research.jsonl    (kept — feeds keyword extraction)
+        data/processed/<DATASET>/grants.excluded.jsonl    (removed, with type + rationale)
 """
 
 from __future__ import annotations
 
 import json
+import os
 import time
 from pathlib import Path
 
@@ -29,9 +33,12 @@ from anthropic.types.message_create_params import MessageCreateParamsNonStreamin
 from anthropic.types.messages.batch_create_params import Request
 
 ROOT = Path(__file__).resolve().parent.parent
-IN = ROOT / "data" / "processed" / "grants.clean.jsonl"
-OUT_KEEP = ROOT / "data" / "processed" / "grants.research.jsonl"
-OUT_DROP = ROOT / "data" / "processed" / "grants.excluded.jsonl"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+IN = PROC / "grants.clean.jsonl"
+OUT_KEEP = PROC / "grants.research.jsonl"
+OUT_DROP = PROC / "grants.excluded.jsonl"
+BATCH_ID_FILE = PROC / "filter_research.batch_id.txt"
 
 MODEL = "claude-haiku-4-5"
 ABSTRACT_CHARS = 1500   # enough of the abstract to judge primary purpose
@@ -83,24 +90,30 @@ def main() -> int:
     print(f"classifying {len(records)} grants with {MODEL} (Batches API) ...")
 
     client = anthropic.Anthropic()
-    requests = [
-        Request(
-            custom_id=r["id"],
-            params=MessageCreateParamsNonStreaming(
-                model=MODEL,
-                max_tokens=200,
-                messages=[{"role": "user", "content": PROMPT.format(
-                    title=r["title"], abstract=r["abstract"][:ABSTRACT_CHARS])}],
-                output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
-            ),
-        )
-        for r in records
-    ]
 
-    batch = client.messages.batches.create(requests=requests)
-    print(f"batch {batch.id} submitted; polling ...")
+    if BATCH_ID_FILE.exists():
+        batch_id = BATCH_ID_FILE.read_text().strip()
+        print(f"resuming existing batch {batch_id} (found {BATCH_ID_FILE.relative_to(ROOT)}) ...")
+    else:
+        requests = [
+            Request(
+                custom_id=r["id"],
+                params=MessageCreateParamsNonStreaming(
+                    model=MODEL,
+                    max_tokens=200,
+                    messages=[{"role": "user", "content": PROMPT.format(
+                        title=r["title"], abstract=r["abstract"][:ABSTRACT_CHARS])}],
+                    output_config={"format": {"type": "json_schema", "schema": SCHEMA}},
+                ),
+            )
+            for r in records
+        ]
+        batch = client.messages.batches.create(requests=requests)
+        batch_id = batch.id
+        BATCH_ID_FILE.write_text(batch_id)
+        print(f"batch {batch_id} submitted; polling ...")
     while True:
-        b = client.messages.batches.retrieve(batch.id)
+        b = client.messages.batches.retrieve(batch_id)
         if b.processing_status == "ended":
             break
         print(f"  status={b.processing_status} "
@@ -108,7 +121,7 @@ def main() -> int:
         time.sleep(30)
 
     verdict: dict[str, dict] = {}
-    for res in client.messages.batches.results(batch.id):
+    for res in client.messages.batches.results(batch_id):
         if res.result.type != "succeeded":
             continue
         text = next((blk.text for blk in res.result.message.content if blk.type == "text"), "")
@@ -147,6 +160,7 @@ def main() -> int:
         print(f"  {c:5d}  {t:38s} [{mark}]")
     print(f"\n-> {OUT_KEEP.relative_to(ROOT)}")
     print(f"-> {OUT_DROP.relative_to(ROOT)}")
+    BATCH_ID_FILE.unlink(missing_ok=True)
     return 0
 
 

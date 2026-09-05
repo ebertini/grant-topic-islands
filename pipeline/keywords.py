@@ -11,9 +11,12 @@ near-duplicates.
 The SAME model is reused in stage 3 for clustering, so the extraction and
 hierarchy live in one embedding space (see PLAN.md).
 
-Input:  data/processed/grants.clean.jsonl
-        data/processed/stopwords.txt
-Output: data/processed/grants.keywords.jsonl
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/grants.clean.jsonl
+        data/processed/<DATASET>/stopwords.txt
+Output: data/processed/<DATASET>/grants.keywords.jsonl
         one object per doc: {id, title, funder, funder_code, year,
                              keywords: [{text, score}, ...]}
 """
@@ -21,6 +24,7 @@ Output: data/processed/grants.keywords.jsonl
 from __future__ import annotations
 
 import json
+import os
 import re
 from pathlib import Path
 
@@ -32,9 +36,11 @@ from sentence_transformers import SentenceTransformer
 from sklearn.feature_extraction.text import ENGLISH_STOP_WORDS
 
 ROOT = Path(__file__).resolve().parent.parent
-IN = ROOT / "data" / "processed" / "grants.clean.jsonl"
-STOP = ROOT / "data" / "processed" / "stopwords.txt"
-OUT = ROOT / "data" / "processed" / "grants.keywords.jsonl"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+IN = PROC / "grants.clean.jsonl"
+STOP = PROC / "stopwords.txt"
+OUT = PROC / "grants.keywords.jsonl"
 
 MODEL_NAME = "intfloat/e5-large-v2"   # scientific-capable retrieval embedder
 TOP_N = 15            # keyphrases kept per abstract

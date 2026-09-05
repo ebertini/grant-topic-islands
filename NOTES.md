@@ -4,6 +4,24 @@ Running list of things to revisit. Most important / most recently raised first.
 
 ---
 
+## 0. Topic Cards removed; live dataset switcher added (2026-09-05)
+
+Removed the Topic Cards view entirely (`web/cards.html`, `docs/cards.html`) — kept only
+**Topic Islands**, which is now the one page at the site root (`docs/index.html`; no more
+separate landing page). In its place: a **dataset dropdown in the header**, populated at load
+from `data/processed/manifest.json` (dev) / `docs/manifest.json` (deploy). Switching re-fetches
+that dataset's `topics.json` and rebuilds all derived state client-side — no rebuild needed to
+change which dataset a visitor is looking at. `pipeline/activate.py` (which copied one "active"
+dataset to a fixed path) is retired; `pipeline/manifest.py` + `pipeline/publish_docs.py` replace
+it. See README's "Multiple datasets, switchable live on the site" section for the workflow.
+
+Verified with a real headless-Chrome run (Puppeteer, installed ad hoc — not a project
+dependency) against both `web/index.html` and the actual `docs/index.html` build: zero console
+errors, dataset switch changes the rendered topics, drill-down and keyphrase→grant→highlighted
+abstract all work end-to-end on both datasets.
+
+---
+
 ## 1. Topic↔document linking is too restrictive  — DEFERRED (raised 2026-07-21)
 
 **The step:** `pipeline/coverage.py` (and the `docs` lists) defines how a grant is
@@ -49,19 +67,14 @@ but link documents with more than that intersection.
 
 ## 2. Residual catch-all topic "Social Systems & Risk" (185 grants)
 
-The one loose top-level cluster in the current run. Holds genuine mis-clusters
-(cp violation → physics, coxeter groups → math, beamforming → signal processing,
-javascript → PL, preterm birth → biomedical; one subtopic literally auto-labeled
-"Mixed Mechanisms"). Likely fix: bump `N_TOP` 18 → ~24 in `cluster.py` so it
-splits and strays rejoin real topics; optionally `MIN_DF` 3 → 2 for richer leaves
-now that keyphrases are clean. ~2-min re-run of cluster→label→seed→coverage.
-
-## 3. Frontends not visually verified
-
-`web/index.html` (islands) and `web/cards.html` — never eyeballed in a browser
-from this environment. Likely tuning: islands spacing/overlap, keyword font
-clamping for long phrases, LOD zoom thresholds; cards fixed height (380px) and
-magnitude-bar legibility. Needs user screenshots to tune.
+The one loose top-level cluster, as of the original 1,654-grant `grants` run. Holds genuine
+mis-clusters (cp violation → physics, coxeter groups → math, beamforming → signal processing,
+javascript → PL, preterm birth → biomedical; one subtopic literally auto-labeled "Mixed
+Mechanisms"). Likely fix: bump `N_TOP` 18 → ~24 in `cluster.py` so it splits and strays rejoin
+real topics; optionally `MIN_DF` 3 → 2 for richer leaves now that keyphrases are clean. ~2-min
+re-run of cluster→label→seed→coverage. **Note:** the `grants` dataset has since been
+reprocessed (now 1,537 docs, not 1,654) — re-check whether this catch-all still exists before
+acting on the fix above.
 
 ## 4. Embedder decision (resolved, for the record)
 

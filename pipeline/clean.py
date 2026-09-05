@@ -12,23 +12,29 @@ Two layers of cleaning:
     We compute per-corpus document frequency and emit the high-DF terms as an
     extra stopword list for stage 2 (KeyBERT). This is corpus-specific by design.
 
-Input:  data/processed/grants.normalized.jsonl
-Output: data/processed/grants.clean.jsonl   (cleaned abstract text)
-        data/processed/stopwords.txt         (domain stopwords for stage 2)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/grants.normalized.jsonl
+Output: data/processed/<DATASET>/grants.clean.jsonl   (cleaned abstract text)
+        data/processed/<DATASET>/stopwords.txt         (domain stopwords for stage 2)
 """
 
 from __future__ import annotations
 
 import html
 import json
+import os
 import re
 from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-IN = ROOT / "data" / "processed" / "grants.normalized.jsonl"
-OUT_DOCS = ROOT / "data" / "processed" / "grants.clean.jsonl"
-OUT_STOP = ROOT / "data" / "processed" / "stopwords.txt"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+IN = PROC / "grants.normalized.jsonl"
+OUT_DOCS = PROC / "grants.clean.jsonl"
+OUT_STOP = PROC / "stopwords.txt"
 
 # Terms appearing in >= this fraction of abstracts are treated as grant-generic
 # filler and added to the domain stoplist. Tune after eyeballing the report.

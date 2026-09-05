@@ -17,20 +17,26 @@ Adds `doc_count` to every topic and subtopic, and a deduplicated `docs` id list
 to every subtopic (for topic/subtopic drill-down; topic lists are the union of
 these in the frontend).
 
-Input:  data/processed/topics.json
-        data/processed/grants.keywords.jsonl
-Output: data/processed/topics.json  (updated in place)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/topics.json
+        data/processed/<DATASET>/grants.keywords.jsonl
+Output: data/processed/<DATASET>/topics.json  (updated in place)
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-TOPICS = ROOT / "data" / "processed" / "topics.json"
-KEYWORDS = ROOT / "data" / "processed" / "grants.keywords.jsonl"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+TOPICS = PROC / "topics.json"
+KEYWORDS = PROC / "grants.keywords.jsonl"
 
 
 def main() -> int:

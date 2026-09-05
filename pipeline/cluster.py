@@ -9,15 +9,19 @@ which is exactly what the nested-island layout needs.
 Each cluster is labelled by its medoid (member keyword nearest the centroid) and
 carries aggregate score, document frequency, and funder mix.
 
-Input:  data/processed/grants.keywords.jsonl
-Output: data/processed/topics.json           (hierarchy; seed coords added in stage 4)
-        data/processed/topic_centroids.npy    (level-1 centroids, for stage 4 UMAP)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/grants.keywords.jsonl
+Output: data/processed/<DATASET>/topics.json           (hierarchy; seed coords added in stage 4)
+        data/processed/<DATASET>/topic_centroids.npy    (level-1 centroids, for stage 4 UMAP)
 """
 
 from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -28,15 +32,16 @@ from scipy.cluster.hierarchy import fcluster, linkage
 from sentence_transformers import SentenceTransformer
 
 ROOT = Path(__file__).resolve().parent.parent
-IN = ROOT / "data" / "processed" / "grants.keywords.jsonl"
-OUT = ROOT / "data" / "processed" / "topics.json"
-OUT_CENTROIDS = ROOT / "data" / "processed" / "topic_centroids.npy"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+IN = PROC / "grants.keywords.jsonl"
+OUT = PROC / "topics.json"
+OUT_CENTROIDS = PROC / "topic_centroids.npy"
 
 MODEL_NAME = "all-MiniLM-L6-v2"   # clean LLM keyphrases cluster well here
 MIN_DF = 3          # keep phrases occurring in >= this many grants
 N_TOP = 18          # level-1 topics
 N_SUB = 90          # level-2 subtopics (nested within topics)
-MAX_DOCS = 50       # cap the doc-id list stored per keyword
 LABEL_TERMS = 6     # c-TF-IDF terms kept per node (first 3 form the label)
 
 _TOK = re.compile(r"[a-z][a-z]{2,}")
@@ -129,7 +134,7 @@ def main() -> int:
             "text": vocab[i],
             "weight": round(kw_score[vocab[i]], 3),
             "doc_freq": len(docs),
-            "docs": docs[:MAX_DOCS],
+            "docs": docs,
         }
 
     def cluster_docs(idx: list[int]) -> list[str]:
@@ -151,7 +156,7 @@ def main() -> int:
         for si, c2 in enumerate(sub_ids, 1):
             idx2 = by_l2[c2]
             leaves = sorted((kw_leaf(i) for i in idx2),
-                            key=lambda k: -k["weight"])
+                            key=lambda k: (-k["doc_freq"], -k["weight"]))
             subs.append({
                 "id": f"t{ti}.{si}",
                 "label": " ".join(l2_labels[c2][:3]),

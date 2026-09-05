@@ -11,15 +11,19 @@ Adds the pieces the frontend needs that aren't semantic-free:
   - `funder` on each keyword leaf: the dominant funder among its source docs,
     for the frontend's funder colour/facet.
 
-Input:  data/processed/topics.json
-        data/processed/topic_centroids.npy
-        data/processed/grants.keywords.jsonl   (doc metadata)
-Output: data/processed/topics.json  (updated in place: seed, docs, kw funder)
+Dataset selection: set DATASET=<name> to read/write under
+data/processed/<name>/ (default "grants").
+
+Input:  data/processed/<DATASET>/topics.json
+        data/processed/<DATASET>/topic_centroids.npy
+        data/processed/<DATASET>/grants.keywords.jsonl   (doc metadata)
+Output: data/processed/<DATASET>/topics.json  (updated in place: seed, docs, kw funder)
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections import Counter
 from pathlib import Path
 
@@ -27,10 +31,12 @@ import numpy as np
 from sklearn.manifold import MDS
 
 ROOT = Path(__file__).resolve().parent.parent
-TOPICS = ROOT / "data" / "processed" / "topics.json"
-CENTROIDS = ROOT / "data" / "processed" / "topic_centroids.npy"
-KEYWORDS = ROOT / "data" / "processed" / "grants.keywords.jsonl"
-RESEARCH = ROOT / "data" / "processed" / "grants.research.jsonl"
+DATASET = os.environ.get("DATASET", "grants")
+PROC = ROOT / "data" / "processed" / DATASET
+TOPICS = PROC / "topics.json"
+CENTROIDS = PROC / "topic_centroids.npy"
+KEYWORDS = PROC / "grants.keywords.jsonl"
+RESEARCH = PROC / "grants.research.jsonl"
 
 
 def seed_coords(centroids: np.ndarray) -> np.ndarray:
