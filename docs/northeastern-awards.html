@@ -89,7 +89,7 @@
     <span id="datasetLabel"></span>
     <nav id="crumbs"></nav>
     <div class="controls">
-      <button id="scaleFreqBtn" class="btn">Scale by frequency</button>
+      <button id="scaleFreqBtn" class="btn on">Scale by frequency</button>
       <button id="gridBtn" class="btn">Grid layout</button>
       <div id="timelineLegend"><span id="legendLo"></span><span class="ramp"></span><span id="legendHi"></span></div>
       <button id="timelineBtn" class="btn">Show timeline</button>
@@ -146,7 +146,7 @@ const SPARK_W=130, SPARK_H=12, SPARK_GAP=4, SPARK_CELL_GAP=0.6;
 // keyword in the dataset — top-level AND subtopic-level share the same pool of keyword objects
 // and the same domain), so a card's size means the same grant count everywhere: comparable
 // across topics, and just as active when drilled into a single subtopic.
-let scaleByFreq=false;
+let scaleByFreq=true;
 const MIN_FS=9, MAX_FS=64;
 // exponent < 0.5 (vs. a plain sqrt scale) spreads out the low/mid end more aggressively, so
 // differences stay visible for subtopic-level terms whose counts are far below the dataset's
@@ -448,21 +448,21 @@ timelineBtn.onclick=()=>{
   timelineBtn.classList.toggle("on",showTimeline);
   timelineBtn.textContent=showTimeline?"Hide timeline":"Show timeline";
   timelineLegend.classList.toggle("on",showTimeline);
-  render();
+  render(false);   // toggle in place — don't reset the current pan/zoom
 };
 
 const scaleFreqBtn=document.getElementById("scaleFreqBtn");
 scaleFreqBtn.onclick=()=>{
   scaleByFreq=!scaleByFreq;
   scaleFreqBtn.classList.toggle("on",scaleByFreq);
-  render();
+  render(false);   // toggle in place — don't reset the current pan/zoom
 };
 
 const gridBtn=document.getElementById("gridBtn");
 gridBtn.onclick=()=>{
   gridLayout=!gridLayout;
   gridBtn.classList.toggle("on",gridLayout);
-  render();
+  render(false);   // toggle in place — don't reset the current pan/zoom
 };
 
 /* ---------- dataset loading + the live dataset switcher ---------- */
