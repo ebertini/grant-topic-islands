@@ -1,8 +1,10 @@
 [
   {
     "id": "grants",
-    "label": "General Research Awards",
-    "file": "datasets/grants.json",
+    "label": "Northeastern University Faculty Awards",
+    "description": "Grants awarded to Northeastern University faculty, across all disciplines and funders (1995–2026).",
+    "slug": "northeastern-awards",
+    "file": "grants/topics.json",
     "n_docs": 1537,
     "n_topics": 18,
     "funders": [
@@ -18,7 +20,9 @@
   {
     "id": "nsf-cise-21-25",
     "label": "NSF CISE 2021–2025",
-    "file": "datasets/nsf-cise-21-25.json",
+    "description": "NSF Directorate for Computer & Information Science & Engineering (CISE) awards, 2021–2025.",
+    "slug": "nsf-cise-2021-2025",
+    "file": "nsf-cise-21-25/topics.json",
     "n_docs": 3851,
     "n_topics": 18,
     "funders": [

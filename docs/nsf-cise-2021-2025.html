@@ -106,11 +106,11 @@
 <script type="module">
 const esc=s=>(s||"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
 
-const DATA_DIR="../data/processed";   // swapped to "." by the docs/ deploy build
+const DATA_DIR=".";   // swapped to "." by the docs/ deploy build
 // ENTRY picks which dataset THIS page shows — each deployed page is single-dataset
 // (see pipeline/publish_docs.py, which generates one HTML file per dataset by
 // substituting this line). Local dev default: the Northeastern awards dataset.
-const ENTRY={"id":"grants","label":"Northeastern University Faculty Awards","file":"grants/topics.json","excluded_years":[]};
+const ENTRY={"id": "nsf-cise-21-25", "label": "NSF CISE 2021–2025", "file": "datasets/nsf-cise-21-25.json", "excluded_years": [2020, 2026]};
 
 // ---- dataset-dependent state — (re)assigned by loadDataset() on load/switch ----
 let data, docs, topicById;

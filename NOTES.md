@@ -4,21 +4,28 @@ Running list of things to revisit. Most important / most recently raised first.
 
 ---
 
-## 0. Topic Cards removed; live dataset switcher added (2026-09-05)
+## 0. Topic Cards removed; each dataset is its own shareable page (2026-09-05)
 
 Removed the Topic Cards view entirely (`web/cards.html`, `docs/cards.html`) — kept only
-**Topic Islands**, which is now the one page at the site root (`docs/index.html`; no more
-separate landing page). In its place: a **dataset dropdown in the header**, populated at load
-from `data/processed/manifest.json` (dev) / `docs/manifest.json` (deploy). Switching re-fetches
-that dataset's `topics.json` and rebuilds all derived state client-side — no rebuild needed to
-change which dataset a visitor is looking at. `pipeline/activate.py` (which copied one "active"
-dataset to a fixed path) is retired; `pipeline/manifest.py` + `pipeline/publish_docs.py` replace
-it. See README's "Multiple datasets, switchable live on the site" section for the workflow.
+**Topic Islands**. First pass gave it a live in-page dataset dropdown; reverted per Enrico's
+request (2026-09-05) to **one static page per dataset** instead, so each can be shared as its
+own URL: `docs/northeastern-awards.html` and `docs/nsf-cise-2021-2025.html`, plus a small
+`docs/index.html` landing page linking to both. Also fixed the "grants" dataset's public label —
+it's **awards to Northeastern University faculty**, not a generic "General Research Awards".
+
+Mechanism: `web/index.html` bakes in a single `ENTRY` constant (`{id, label, file,
+excluded_years}`) naming which dataset that page shows; `pipeline/publish_docs.py` generates
+each deployed page by substituting `ENTRY` (and `DATA_DIR`) into a copy of the template — no
+shared runtime state between pages, no dropdown. `pipeline/manifest.py` still scans
+`data/processed/*/` for available datasets and now also carries a `slug` (page filename) and
+`description` (landing-page copy) per dataset. `pipeline/activate.py` (the original
+single-active-dataset copy) remains retired.
 
 Verified with a real headless-Chrome run (Puppeteer, installed ad hoc — not a project
-dependency) against both `web/index.html` and the actual `docs/index.html` build: zero console
-errors, dataset switch changes the rendered topics, drill-down and keyphrase→grant→highlighted
-abstract all work end-to-end on both datasets.
+dependency) against the landing page and both actual deployed dataset pages: zero console
+errors on any of the three; each dataset page loads only its own data (no stale dropdown, no
+cross-page dependency); drill-down, keyphrase→grant lookup, and highlighted-abstract expansion
+all confirmed working on the deployed CISE page specifically.
 
 ---
 
