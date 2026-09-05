@@ -225,7 +225,7 @@ function layoutStack(fullSorted,page){
   const width=fullSorted.length
     ?Math.max(showTimeline?SPARK_W:0,...fullSorted.map(k=>cardBox(k.text,fsFor(k)).w)):0;
   const pagerY=top+stackH+PAGER_GAP+PAGER_H/2;
-  return {nodes,width,height,total,page,pageCount,hasPager,pagerY};
+  return {nodes,width,height,total,page,pageCount,hasPager,pagerY,maxFsHere};
 }
 
 /* ---------- build groups for the current level ---------- */
@@ -296,11 +296,19 @@ function render(refit=true){
   if(refit) fit(groups);   // only re-fit the viewport on level changes, not on a page turn
 }
 
+// Title font floors at a fixed base size, but must always exceed the biggest
+// keyword card actually in this group (g.cloud.maxFsHere, from the FULL
+// sorted list — not just the visible page, so paging never reveals a
+// keyword bigger than its own title) by TITLE_OVER_KW, so scale-by-frequency
+// can never make a term outshine its topic/subtopic title.
+const TITLE_OVER_KW=8;
 function drawTitles(groups){
   gTitle.selectAll("*").remove();
   groups.forEach(g=>{
+    const base=path.length===0?24:22;
+    const fs=Math.max(base,g.cloud.maxFsHere+TITLE_OVER_KW);
     const t=gTitle.append("text").attr("class","group-title"+(g.drill?" drill":""))
-      .attr("x",g.x).attr("y",g.y-g.cloud.height/2-14).attr("font-size",path.length===0?24:22)
+      .attr("x",g.x).attr("y",g.y-g.cloud.height/2-14).attr("font-size",fs)
       .text(g.title);
     if(g.drill) t.on("click",e=>{e.stopPropagation();path=[g.id];selectedEl=null;render();});
   });
