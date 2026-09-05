@@ -441,6 +441,12 @@ function updateTimelineLegend(){
     `linear-gradient(to right, ${d3.range(0,1.0001,0.1).map(scaleAt).join(",")})`;
 }
 
+// Grid layout has no fixed canvas anchor (unlike the semantic map or the
+// drilled-in radial view, both centered/bounded within the W×H canvas) — its
+// total extent grows directly with card size, so it must refit whenever that
+// size-affecting state changes underneath it, or the old viewport stops
+// framing it (cards shift/clip off-screen). The anchored layouts don't have
+// this problem, so they can safely keep the user's current pan/zoom.
 const timelineBtn=document.getElementById("timelineBtn");
 const timelineLegend=document.getElementById("timelineLegend");
 timelineBtn.onclick=()=>{
@@ -448,21 +454,21 @@ timelineBtn.onclick=()=>{
   timelineBtn.classList.toggle("on",showTimeline);
   timelineBtn.textContent=showTimeline?"Hide timeline":"Show timeline";
   timelineLegend.classList.toggle("on",showTimeline);
-  render(false);   // toggle in place — don't reset the current pan/zoom
+  render(gridLayout);
 };
 
 const scaleFreqBtn=document.getElementById("scaleFreqBtn");
 scaleFreqBtn.onclick=()=>{
   scaleByFreq=!scaleByFreq;
   scaleFreqBtn.classList.toggle("on",scaleByFreq);
-  render(false);   // toggle in place — don't reset the current pan/zoom
+  render(gridLayout);
 };
 
 const gridBtn=document.getElementById("gridBtn");
 gridBtn.onclick=()=>{
   gridLayout=!gridLayout;
   gridBtn.classList.toggle("on",gridLayout);
-  render(false);   // toggle in place — don't reset the current pan/zoom
+  render();   // always refit — switching layout mode changes the coordinate space
 };
 
 /* ---------- dataset loading + the live dataset switcher ---------- */
